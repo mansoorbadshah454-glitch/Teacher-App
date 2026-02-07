@@ -22,6 +22,7 @@ import {
     Shield
 } from 'lucide-react';
 import AttendanceView from '../components/AttendanceView';
+import PerformanceView from '../components/PerformanceView';
 
 const Dashboard = ({ user }) => {
     const [isOnDuty, setIsOnDuty] = useState(true);
@@ -120,7 +121,7 @@ const Dashboard = ({ user }) => {
     const stats = [
         { id: 'attendance', title: 'Attendance', icon: UserCheck, color: '#6366f1', description: 'Mark today\'s presence', action: () => setCurrentView('attendance') },
         { id: 'news-feed', title: 'News Feed', icon: FileText, color: '#10b981', description: 'School announcements', action: () => setCurrentView('feed') },
-        { id: 'weekly', title: 'Weekly Report', icon: BarChart3, color: '#8b5cf6', description: 'Review progress', action: () => alert("Weekly Report coming soon!") },
+        { id: 'performance', title: 'Performance', icon: BarChart3, color: '#8b5cf6', description: 'Update student scores', action: () => setCurrentView('performance') },
         { id: 'next-class', title: 'Next Class', icon: Clock, color: '#f43f5e', description: 'Class 10-A • 10:30 AM', action: () => alert("Class schedule coming soon!") },
     ];
 
@@ -159,6 +160,14 @@ const Dashboard = ({ user }) => {
         return (
             <div className="app-container" style={{ padding: '1.5rem' }}>
                 <AttendanceView user={user} onBack={() => setCurrentView('main')} />
+            </div>
+        );
+    }
+
+    if (currentView === 'performance') {
+        return (
+            <div className="app-container" style={{ padding: '1.5rem' }}>
+                <PerformanceView user={user} onBack={() => setCurrentView('main')} />
             </div>
         );
     }

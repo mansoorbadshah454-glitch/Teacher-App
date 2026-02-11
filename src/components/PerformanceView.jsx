@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { db } from '../firebase';
-import { collection, query, onSnapshot, doc, updateDoc, getDocs, where } from 'firebase/firestore';
+import { collection, query, onSnapshot, doc, updateDoc, getDocs, where, addDoc, serverTimestamp } from 'firebase/firestore';
 import { ChevronLeft, User, BookOpen, Activity, Heart, Save, Loader2, Trophy, Calendar, Search, GraduationCap, ClipboardList, TrendingUp } from 'lucide-react';
 
 const PerformanceView = ({ user, onBack }) => {
@@ -174,7 +174,72 @@ const PerformanceView = ({ user, onBack }) => {
                 wellness: formData.wellness,
                 attendance: formData.attendance
             });
-            alert("Performance data saved!");
+
+            // --- Notification Logic ---
+            try {
+                // 1. Analyze Scores
+                const highScores = [
+                    ...formData.academicScores.filter(s => s.score >= 80),
+                    ...formData.homeworkScores.filter(s => s.score >= 80)
+                ].map(s => s.subject);
+
+                const lowScores = [
+                    ...formData.academicScores.filter(s => s.score < 50),
+                    ...formData.homeworkScores.filter(s => s.score < 50)
+                ].map(s => s.subject);
+
+                // 2. Construct Message
+                let title = "Performance Update";
+                let message = "";
+                let type = "info";
+
+                if (highScores.length > 0 && lowScores.length === 0) {
+                    title = "🌟 Excellent Progress!";
+                    message = `Great news! ${selectedStudent.name} is excelling in ${highScores.join(', ')}. Keep up the fantastic work!`;
+                    type = "celebration";
+                } else if (lowScores.length > 0 && highScores.length === 0) {
+                    title = "🌱 Growth Opportunity";
+                    message = `We noticed ${selectedStudent.name} is finding ${lowScores.join(', ')} a bit challenging. Let's work together to support their improvement.`;
+                    type = "alert";
+                } else if (highScores.length > 0 && lowScores.length > 0) {
+                    title = "📊 Performance Update";
+                    message = `${selectedStudent.name} is doing great in ${highScores.join(', ')}, but could use some extra support in ${lowScores.join(', ')}.`;
+                    type = "info";
+                } else {
+                    title = "📝 Just Updated";
+                    message = `A new performance report is available for ${selectedStudent.name}. Please check the app for the latest details.`;
+                }
+
+                // 3. Find Parent & Send
+                const parentsQuery = query(
+                    collection(db, `schools/${user.schoolId}/parents`),
+                    where("children", "array-contains", selectedStudent.id)
+                );
+                const parentsSnap = await getDocs(parentsQuery);
+
+                if (!parentsSnap.empty) {
+                    const parentId = parentsSnap.docs[0].id;
+                    await addDoc(collection(db, `schools/${user.schoolId}/notifications`), {
+                        parentId: parentId,
+                        studentId: selectedStudent.id,
+                        studentName: selectedStudent.name,
+                        title: title,
+                        message: message,
+                        type: type,
+                        read: false,
+                        createdAt: serverTimestamp()
+                    });
+                    console.log("Notification sent to parent:", parentId);
+                } else {
+                    console.log("No parent account found for this student.");
+                }
+
+            } catch (notifyError) {
+                console.error("Failed to send notification:", notifyError);
+                // Don't block the UI if notification fails
+            }
+
+            alert("Performance data saved & parent notified!");
             setViewState('list');
             setSelectedStudent(null);
         } catch (error) {
@@ -338,10 +403,13 @@ const PerformanceView = ({ user, onBack }) => {
                                 {formData.academicScores.map((subj, idx) => {
                                     const isEditable = assignedSubjects.includes(subj.subject);
                                     return (
-                                        <div key={idx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                            <span style={{ color: 'var(--text-main)', fontSize: '0.95rem', fontWeight: '500' }}>{subj.subject}</span>
+                                        <div key={idx} style={{ marginBottom: '1rem' }}>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem', fontSize: '0.9rem', fontWeight: '600' }}>
+                                                <span style={{ color: 'var(--text-main)' }}>{subj.subject}</span>
+                                                <span style={{ color: isEditable ? '#fbbf24' : 'var(--text-muted)' }}>{subj.score}%</span>
+                                            </div>
                                             <input
-                                                type="number"
+                                                type="range"
                                                 min="0" max="100"
                                                 value={subj.score}
                                                 disabled={!isEditable}
@@ -351,13 +419,11 @@ const PerformanceView = ({ user, onBack }) => {
                                                     setFormData({ ...formData, academicScores: newScores });
                                                 }}
                                                 style={{
-                                                    background: isEditable ? 'rgba(255,255,255,0.03)' : 'rgba(255,255,255,0.01)', // Visual cue
-                                                    border: '1px solid var(--glass-border)',
-                                                    color: isEditable ? 'white' : 'rgba(255,255,255,0.3)', // Dim text if disabled
-                                                    padding: '0.6rem', borderRadius: '12px', width: '80px', textAlign: 'center',
-                                                    fontWeight: '700', fontSize: '1rem', outline: 'none',
-                                                    opacity: isEditable ? 1 : 0.5,
-                                                    cursor: isEditable ? 'text' : 'not-allowed'
+                                                    width: '100%',
+                                                    accentColor: '#fbbf24',
+                                                    height: '6px',
+                                                    opacity: isEditable ? 1 : 0.4,
+                                                    cursor: isEditable ? 'pointer' : 'not-allowed'
                                                 }}
                                             />
                                         </div>
@@ -375,10 +441,13 @@ const PerformanceView = ({ user, onBack }) => {
                                 {formData.homeworkScores.map((subj, idx) => {
                                     const isEditable = assignedSubjects.includes(subj.subject);
                                     return (
-                                        <div key={idx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                            <span style={{ color: 'var(--text-main)', fontSize: '0.95rem', fontWeight: '500' }}>{subj.subject}</span>
+                                        <div key={idx} style={{ marginBottom: '1rem' }}>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem', fontSize: '0.9rem', fontWeight: '600' }}>
+                                                <span style={{ color: 'var(--text-main)' }}>{subj.subject}</span>
+                                                <span style={{ color: isEditable ? '#10b981' : 'var(--text-muted)' }}>{subj.score}%</span>
+                                            </div>
                                             <input
-                                                type="number"
+                                                type="range"
                                                 min="0" max="100"
                                                 value={subj.score}
                                                 disabled={!isEditable}
@@ -388,13 +457,11 @@ const PerformanceView = ({ user, onBack }) => {
                                                     setFormData({ ...formData, homeworkScores: newScores });
                                                 }}
                                                 style={{
-                                                    background: isEditable ? 'rgba(255,255,255,0.03)' : 'rgba(255,255,255,0.01)',
-                                                    border: '1px solid var(--glass-border)',
-                                                    color: isEditable ? 'white' : 'rgba(255,255,255,0.3)',
-                                                    padding: '0.6rem', borderRadius: '12px', width: '80px', textAlign: 'center',
-                                                    fontWeight: '700', fontSize: '1rem', outline: 'none',
-                                                    opacity: isEditable ? 1 : 0.5,
-                                                    cursor: isEditable ? 'text' : 'not-allowed'
+                                                    width: '100%',
+                                                    accentColor: '#10b981',
+                                                    height: '6px',
+                                                    opacity: isEditable ? 1 : 0.4,
+                                                    cursor: isEditable ? 'pointer' : 'not-allowed'
                                                 }}
                                             />
                                         </div>
@@ -433,19 +500,23 @@ const PerformanceView = ({ user, onBack }) => {
                             <h3 style={{ fontSize: '1.1rem', fontWeight: '800', marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                                 <Calendar size={20} color="#34d399" /> Attendance Percentage
                             </h3>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '1rem', fontWeight: '700' }}>
+                                    <span style={{ color: 'var(--text-muted)' }}>Attendance</span>
+                                    <span style={{ color: '#34d399' }}>{formData.attendance}%</span>
+                                </div>
                                 <input
-                                    type="number"
+                                    type="range"
                                     min="0" max="100"
                                     value={formData.attendance}
                                     onChange={(e) => setFormData({ ...formData, attendance: parseInt(e.target.value) || 0 })}
                                     style={{
-                                        flex: 1, background: 'rgba(255,255,255,0.03)', border: '1px solid var(--glass-border)',
-                                        color: 'white', padding: '1rem', borderRadius: '16px', textAlign: 'center', fontSize: '1.25rem',
-                                        fontWeight: '800', outline: 'none'
+                                        width: '100%',
+                                        accentColor: '#34d399',
+                                        height: '6px',
+                                        cursor: 'pointer'
                                     }}
                                 />
-                                <span style={{ fontSize: '1.25rem', fontWeight: '800', color: 'var(--text-muted)' }}>%</span>
                             </div>
                         </div>
 

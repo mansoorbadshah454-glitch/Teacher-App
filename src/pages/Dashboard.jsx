@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { auth, db, storage } from '../firebase';
-import { addDoc, collection, serverTimestamp, doc, onSnapshot, query, orderBy, updateDoc, arrayUnion, arrayRemove, increment, getDocs, getDoc } from 'firebase/firestore';
+import { addDoc, collection, serverTimestamp, doc, onSnapshot, query, orderBy, updateDoc, setDoc, arrayUnion, arrayRemove, increment, getDocs, getDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import {
     UserCheck,
@@ -32,7 +32,7 @@ import PerformanceView from '../components/PerformanceView';
 const Dashboard = ({ user }) => {
     const navigate = useNavigate();
 
-    const [isOnDuty, setIsOnDuty] = useState(true);
+    const [isOnDuty, setIsOnDuty] = useState(false);
     const [activeTab, setActiveTab] = useState('home'); // 'home', 'notif', 'profile'
     const [currentView, setCurrentView] = useState('main'); // 'main', 'attendance', 'feed'
     const [isSuspended, setIsSuspended] = useState(false);
@@ -52,6 +52,20 @@ const Dashboard = ({ user }) => {
     const [selectedClass, setSelectedClass] = useState('');
     const [classes, setClasses] = useState([]);
 
+    // Helper function to check if it's a new day
+    const isNewDay = (lastUpdateTimestamp) => {
+        if (!lastUpdateTimestamp) return false; // Return false if null (assume safe/recent during pending writes)
+
+        const lastUpdate = lastUpdateTimestamp.toDate ? lastUpdateTimestamp.toDate() : new Date(lastUpdateTimestamp);
+        const now = new Date();
+
+        // Compare dates (ignoring time)
+        const lastDate = new Date(lastUpdate.getFullYear(), lastUpdate.getMonth(), lastUpdate.getDate());
+        const currentDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+        return currentDate > lastDate;
+    };
+
     useEffect(() => {
         if (user && user.schoolId) {
             // Check suspension status
@@ -62,6 +76,51 @@ const Dashboard = ({ user }) => {
                     setIsSuspended(false);
                 }
                 setLoading(false);
+            });
+
+            // Listen to teacher's duty status
+            const teacherDocRef = doc(db, `schools/${user.schoolId}/teachers`, user.uid);
+            const unsubscribeDuty = onSnapshot(teacherDocRef, async (docSnap) => {
+                if (docSnap.exists()) {
+                    const data = docSnap.data();
+                    const dutyStatus = data.isOnDuty || false;
+                    const lastDutyUpdate = data.lastDutyUpdate;
+                    const hasPendingWrites = docSnap.metadata.hasPendingWrites;
+
+                    // Logic:
+                    // 1. If we have pending writes, TRUST the local state (don't auto-reset)
+                    // 2. If it's a new day, auto-reset to OFF
+
+                    if (!hasPendingWrites && isNewDay(lastDutyUpdate)) {
+                        console.log("New day detected - resetting duty status to OFF");
+                        try {
+                            // Only update if it's currently ON or doesn't have the timestamp
+                            if (dutyStatus === true) {
+                                await updateDoc(teacherDocRef, {
+                                    isOnDuty: false,
+                                    lastDutyUpdate: serverTimestamp()
+                                });
+                            }
+                            setIsOnDuty(false);
+                        } catch (error) {
+                            console.error("Error resetting duty status:", error);
+                            setIsOnDuty(false);
+                        }
+                    } else {
+                        setIsOnDuty(dutyStatus);
+                    }
+                } else {
+                    // Initialize teacher document if it doesn't exist
+                    try {
+                        await setDoc(teacherDocRef, {
+                            isOnDuty: false,
+                            lastDutyUpdate: serverTimestamp()
+                        }, { merge: true });
+                        setIsOnDuty(false);
+                    } catch (error) {
+                        console.error("Error initializing teacher document:", error);
+                    }
+                }
             });
 
             // Fetch School Info (Logo) - Much more robust
@@ -157,6 +216,7 @@ const Dashboard = ({ user }) => {
             return () => {
                 unsubscribeStatus();
                 unsubscribePosts();
+                unsubscribeDuty();
             };
         } else {
             setLoading(false);
@@ -164,6 +224,30 @@ const Dashboard = ({ user }) => {
     }, [user]);
 
     if (!user) return null;
+
+    const handleDutyToggle = async () => {
+        if (!user || !user.schoolId) return;
+
+        const newDutyStatus = !isOnDuty;
+        const teacherDocRef = doc(db, `schools/${user.schoolId}/teachers`, user.uid);
+
+        try {
+            await setDoc(teacherDocRef, {
+                isOnDuty: newDutyStatus,
+                lastDutyUpdate: serverTimestamp()
+            }, { merge: true });
+            // The onSnapshot listener will update the state
+        } catch (error) {
+            console.error("Detailed Error updating duty status:", {
+                code: error.code,
+                message: error.message,
+                userUid: user?.uid,
+                schoolId: user?.schoolId,
+                ref: teacherDocRef.path
+            });
+            alert(`Failed to update: ${error.message} (${error.code})`);
+        }
+    };
 
     const handleFileChange = (e, type) => {
         const file = e.target.files[0];
@@ -541,7 +625,7 @@ const Dashboard = ({ user }) => {
                 </div>
 
                 <button
-                    onClick={() => setIsOnDuty(!isOnDuty)}
+                    onClick={handleDutyToggle}
                     style={{
                         background: isOnDuty ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)',
                         border: `1px solid ${isOnDuty ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)'}`,

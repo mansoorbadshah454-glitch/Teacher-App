@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { db } from '../firebase';
-import { collection, query, onSnapshot, doc, updateDoc, getDocs, where, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, query, onSnapshot, doc, updateDoc, getDocs, where, addDoc, serverTimestamp, orderBy, limit } from 'firebase/firestore';
 import { ChevronLeft, User, BookOpen, Activity, Heart, Save, Loader2, Trophy, Calendar, Search, GraduationCap, ClipboardList, TrendingUp } from 'lucide-react';
 
 const PerformanceView = ({ user, onBack }) => {
@@ -14,6 +14,7 @@ const PerformanceView = ({ user, onBack }) => {
     const [students, setStudents] = useState([]);
     const [selectedStudent, setSelectedStudent] = useState(null);
     const [search, setSearch] = useState('');
+    const [absentCount, setAbsentCount] = useState(0);
 
     // Metrics State
     const [metrics, setMetrics] = useState({
@@ -126,6 +127,32 @@ const PerformanceView = ({ user, onBack }) => {
             });
 
             setLoading(false);
+        });
+
+        return () => unsubscribe();
+    }, [assignedClass, user.schoolId]);
+
+    // 3. Fetch Today's Attendance for Absent Count
+    useEffect(() => {
+        if (!assignedClass) return;
+
+        const today = new Date().toISOString().split('T')[0];
+        const q = query(
+            collection(db, `schools/${user.schoolId}/attendance`),
+            where('classId', '==', assignedClass.id),
+            where('date', '==', today),
+            orderBy('timestamp', 'desc'),
+            limit(1)
+        );
+
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            if (!snapshot.empty) {
+                const data = snapshot.docs[0].data();
+                const absents = data.records.filter(r => r.status === 'absent').length;
+                setAbsentCount(absents);
+            } else {
+                setAbsentCount(0);
+            }
         });
 
         return () => unsubscribe();
@@ -295,7 +322,7 @@ const PerformanceView = ({ user, onBack }) => {
                         {viewState === 'edit' ? selectedStudent?.name : 'Performance'}
                     </h2>
                     <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', fontWeight: '500' }}>
-                        {assignedClass?.name} {viewState === 'edit' && '• Editing'}
+                        {assignedClass?.name} • {students.length} Students • {absentCount} Absent Today {viewState === 'edit' && '• Editing'}
                     </p>
                 </div>
             </div>

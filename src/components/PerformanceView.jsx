@@ -34,50 +34,71 @@ const PerformanceView = ({ user, onBack }) => {
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
 
-    // 1. Fetch Assigned Class on Mount
+    const [currentTeacherName, setCurrentTeacherName] = useState(null);
+
+    // 1. Fetch Teacher Profile (Real-time Permissions & Name)
     useEffect(() => {
-        const fetchAssignedClass = async () => {
-            setLoading(true);
-            try {
-                // Get teacher's name
-                const teachersQuery = query(
-                    collection(db, `schools/${user.schoolId}/teachers`),
-                    where("email", "==", user.email)
-                );
-                const teacherSnap = await getDocs(teachersQuery);
+        if (!user?.schoolId || !user?.email) return;
 
-                if (teacherSnap.empty) {
-                    console.error("Teacher not found");
-                    setLoading(false);
-                    return;
-                }
+        setLoading(true);
+        const teachersQuery = query(
+            collection(db, `schools/${user.schoolId}/teachers`),
+            where("email", "==", user.email)
+        );
 
-                const teacherData = teacherSnap.docs[0].data();
-                const teacherName = teacherData.name;
+        const unsubscribeTeacher = onSnapshot(teachersQuery, (snapshot) => {
+            if (!snapshot.empty) {
+                const teacherData = snapshot.docs[0].data();
+                // Real-time Permission Sync
                 setAssignedSubjects(teacherData.subjects || []);
-
-                // Find class by teacher name
-                const classesSnap = await getDocs(collection(db, `schools/${user.schoolId}/classes`));
-                let found = null;
-                classesSnap.forEach(doc => {
-                    const data = doc.data();
-                    if (data.teacher === teacherName) {
-                        found = { id: doc.id, ...data };
-                    }
-                });
-
-                setAssignedClass(found);
-            } catch (error) {
-                console.error("Error fetching assigned class:", error);
-            } finally {
+                // Name Sync (for Class lookup)
+                setCurrentTeacherName(teacherData.name);
+            } else {
+                console.error("Teacher not found");
+                setAssignedSubjects([]);
+                setCurrentTeacherName(null);
                 setLoading(false);
             }
-        };
+        }, (error) => {
+            console.error("Error listening to teacher profile:", error);
+            setLoading(false);
+        });
 
-        if (user?.schoolId) {
-            fetchAssignedClass();
-        }
+        return () => unsubscribeTeacher();
     }, [user.schoolId, user.email]);
+
+    // 2. Fetch Assigned Class (Dependent on Teacher Name)
+    useEffect(() => {
+        if (!user?.schoolId || !currentTeacherName) return;
+
+        // Keep loading true while switching classes/names
+        // But don't reset if we are just updating data within same class
+
+        const classesQuery = query(collection(db, `schools/${user.schoolId}/classes`));
+
+        const unsubscribeClasses = onSnapshot(classesQuery, (snapshot) => {
+            let found = null;
+            snapshot.forEach(doc => {
+                const data = doc.data();
+                if (data.teacher === currentTeacherName) {
+                    found = { id: doc.id, ...data };
+                }
+            });
+
+            if (found) {
+                setAssignedClass(found);
+                // assignedSubjects is handled by Previous Effect
+            } else {
+                setAssignedClass(null);
+            }
+            setLoading(false);
+        }, (error) => {
+            console.error("Error listening to classes:", error);
+            setLoading(false);
+        });
+
+        return () => unsubscribeClasses();
+    }, [user.schoolId, currentTeacherName]);
 
     // 2. Fetch Students & Calculate Metrics
     useEffect(() => {
@@ -96,14 +117,25 @@ const PerformanceView = ({ user, onBack }) => {
             let totalAttendance = 0;
             let studentCount = studentList.length;
 
+            // [IMPROVEMENT] Get list of currently assigned subjects
+            const currentSubjects = assignedClass.subjects || [];
+
             studentList.forEach(s => {
-                // Subject Score Avg
-                const subScores = s.academicScores?.map(i => parseInt(i.score) || 0) || [];
+                // Subject Score Avg - Filtered by Assigned Class Subjects
+                const subScoresRaw = s.academicScores || [];
+                const subScores = subScoresRaw
+                    .filter(i => currentSubjects.includes(i.subject))
+                    .map(i => parseInt(i.score) || 0);
+
                 const subAvg = subScores.length ? subScores.reduce((a, b) => a + b, 0) / subScores.length : 0;
                 totalSubjectScore += subAvg;
 
-                // Homework Score Avg
-                const hwScores = s.homeworkScores?.map(i => parseInt(i.score) || 0) || [];
+                // Homework Score Avg - Filtered by Assigned Class Subjects
+                const hwScoresRaw = s.homeworkScores || [];
+                const hwScores = hwScoresRaw
+                    .filter(i => currentSubjects.includes(i.subject))
+                    .map(i => parseInt(i.score) || 0);
+
                 const hwAvg = hwScores.length ? hwScores.reduce((a, b) => a + b, 0) / hwScores.length : 0;
                 totalHomeworkScore += hwAvg;
 
@@ -116,8 +148,6 @@ const PerformanceView = ({ user, onBack }) => {
             const avgAttendance = studentCount ? (totalAttendance / studentCount) : 0;
 
             // Class Score: Weighted Average of Subject, Homework, and Attendance
-            // Logic: Subject Score (Academics) + Homework Score + Attendance Score / 3
-            // Assuming Attendance is already % (0-100)
             const classScore = (avgSubject + avgHomework + avgAttendance) / 3;
 
             setMetrics({
@@ -161,21 +191,21 @@ const PerformanceView = ({ user, onBack }) => {
     // Handlers
     const handleStudentSelect = (student) => {
         setSelectedStudent(student);
+
+        // Dynamic Form Data Construction based on CURRENT Class Subjects
+        // This ensures purely those subjects assigned by Principal appear
+        const currentSubjects = assignedClass?.subjects || [];
+
+        const constructScores = (existingScores = []) => {
+            return currentSubjects.map(subject => {
+                const found = existingScores.find(s => s.subject === subject);
+                return found || { subject: subject, score: 0 };
+            });
+        };
+
         setFormData({
-            academicScores: student.academicScores || [
-                { subject: 'Math', score: 0 },
-                { subject: 'Science', score: 0 },
-                { subject: 'English', score: 0 },
-                { subject: 'Urdu', score: 0 },
-                { subject: 'Art', score: 0 }
-            ],
-            homeworkScores: student.homeworkScores || [
-                { subject: 'Math', score: 0 },
-                { subject: 'Science', score: 0 },
-                { subject: 'English', score: 0 },
-                { subject: 'Urdu', score: 0 },
-                { subject: 'Art', score: 0 }
-            ],
+            academicScores: constructScores(student.academicScores),
+            homeworkScores: constructScores(student.homeworkScores),
             wellness: student.wellness || { behavior: 80, health: 80, hygiene: 80 },
             attendance: student.attendance?.percentage || student.attendance || 85
         });
@@ -195,6 +225,10 @@ const PerformanceView = ({ user, onBack }) => {
         setSaving(true);
         try {
             const studentRef = doc(db, `schools/${user.schoolId}/classes/${assignedClass.id}/students/${selectedStudent.id}`);
+
+            // We overwrite the scores. 
+            // Note: This removes data for subjects no longer assigned to the class.
+            // This aligns with "if remove subjects it disappear from here".
             await updateDoc(studentRef, {
                 academicScores: formData.academicScores,
                 homeworkScores: formData.homeworkScores,

@@ -132,7 +132,49 @@ const AttendanceView = ({ user, onBack }) => {
             });
 
             await batch.commit();
-            alert("Attendance marked and synced successfully!");
+
+            // 3. Create notifications for parents
+            console.log("Creating parent notifications...");
+            const notificationPromises = students.map(async (student) => {
+                try {
+                    // Find parent for this student
+                    const parentsQuery = query(
+                        collection(db, `schools/${user.schoolId}/parents`),
+                        where("children", "array-contains", student.id)
+                    );
+                    const parentsSnap = await getDocs(parentsQuery);
+
+                    if (!parentsSnap.empty) {
+                        const parentDoc = parentsSnap.docs[0];
+                        const parentData = parentDoc.data();
+                        const status = attendance[student.id] || 'absent';
+
+                        // Create notification for parent
+                        await addDoc(collection(db, `schools/${user.schoolId}/notifications`), {
+                            parentId: parentDoc.id,
+                            studentId: student.id,
+                            studentName: student.name,
+                            type: 'attendance',
+                            status: status,
+                            className: assignedClass.name,
+                            date: today,
+                            message: `${student.name} was marked ${status} in ${assignedClass.name} today.`,
+                            read: false,
+                            createdAt: serverTimestamp()
+                        });
+                        console.log(`✓ Notification created for ${student.name}'s parent`);
+                    } else {
+                        console.log(`No parent found for student: ${student.name}`);
+                    }
+                } catch (err) {
+                    console.error(`Error creating notification for ${student.name}:`, err);
+                }
+            });
+
+            await Promise.all(notificationPromises);
+            console.log("All notifications created successfully!");
+
+            alert("Attendance marked and parents notified successfully!");
             onBack();
         } catch (error) {
             console.error("Save error:", error);

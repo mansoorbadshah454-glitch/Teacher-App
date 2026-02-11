@@ -1,8 +1,91 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { db } from '../firebase';
-import { collection, query, getDocs, where, orderBy, serverTimestamp, writeBatch, doc } from 'firebase/firestore';
-import { ChevronLeft, UserCheck, Search, Loader2 } from 'lucide-react';
+import { db, storage } from '../firebase';
+import { collection, query, getDocs, where, orderBy, serverTimestamp, writeBatch, doc, addDoc } from 'firebase/firestore';
+import { ref, getDownloadURL } from 'firebase/storage';
+import { ChevronLeft, UserCheck, Search, Loader2, User } from 'lucide-react';
+
+// Component to fetch and display student profile image
+const StudentAvatar = ({ studentId, schoolId, profilePic, size = 48 }) => {
+    const [imageUrl, setImageUrl] = useState(null);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        const fetchImage = async () => {
+            try {
+                // First try to get from Firebase Storage
+                const storagePath = `schools/${schoolId}/students/${studentId}/profile.jpg`;
+                const imageRef = ref(storage, storagePath);
+                const url = await getDownloadURL(imageRef);
+                setImageUrl(url);
+            } catch (error) {
+                // If Storage fails, try base64 from profilePic field
+                if (profilePic && profilePic.startsWith('data:image')) {
+                    setImageUrl(profilePic);
+                } else {
+                    // No image available
+                    setImageUrl(null);
+                }
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        if (studentId && schoolId) {
+            fetchImage();
+        } else {
+            setLoading(false);
+        }
+    }, [studentId, schoolId, profilePic]);
+
+    if (loading) {
+        return (
+            <div style={{
+                width: `${size}px`,
+                height: `${size}px`,
+                borderRadius: '14px',
+                background: 'rgba(255,255,255,0.05)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+            }}>
+                <Loader2 size={size * 0.4} className="animate-spin" color="var(--text-muted)" />
+            </div>
+        );
+    }
+
+    if (imageUrl) {
+        return (
+            <img
+                src={imageUrl}
+                alt="Student"
+                style={{
+                    width: `${size}px`,
+                    height: `${size}px`,
+                    borderRadius: '14px',
+                    objectFit: 'cover',
+                    border: '2px solid rgba(255,255,255,0.1)'
+                }}
+            />
+        );
+    }
+
+    // Fallback: Show user icon
+    return (
+        <div style={{
+            width: `${size}px`,
+            height: `${size}px`,
+            borderRadius: '14px',
+            background: 'rgba(255,255,255,0.05)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            border: '2px solid rgba(255,255,255,0.1)'
+        }}>
+            <User size={size * 0.5} color="var(--text-muted)" />
+        </div>
+    );
+};
 
 const AttendanceView = ({ user, onBack }) => {
     const [students, setStudents] = useState([]);
@@ -306,9 +389,17 @@ const AttendanceView = ({ user, onBack }) => {
                                 border: attendance[student.id] === 'present' ? '1px solid var(--primary)' : '1px solid var(--glass-border)'
                             }}
                         >
-                            <div>
-                                <p style={{ fontWeight: '700', fontSize: '1.05rem', marginBottom: '0.2rem' }}>{student.name}</p>
-                                <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: '500' }}>Roll: {student.rollNo || student.roll || '-'} • Class: {assignedClass.name}</p>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', flex: 1 }}>
+                                <StudentAvatar
+                                    studentId={student.id}
+                                    schoolId={user.schoolId}
+                                    profilePic={student.profilePic || student.avatar}
+                                    size={52}
+                                />
+                                <div>
+                                    <p style={{ fontWeight: '700', fontSize: '1.05rem', marginBottom: '0.2rem' }}>{student.name}</p>
+                                    <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: '500' }}>Roll: {student.rollNo || student.roll || '-'} • Class: {assignedClass.name}</p>
+                                </div>
                             </div>
                             <button
                                 onClick={() => toggleStatus(student.id)}

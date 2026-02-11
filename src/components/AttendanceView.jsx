@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { db } from '../firebase';
-import { collection, query, getDocs, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, query, getDocs, where, orderBy, serverTimestamp, writeBatch, doc } from 'firebase/firestore';
 import { ChevronLeft, UserCheck, Search, Loader2 } from 'lucide-react';
 
 const AttendanceView = ({ user, onBack }) => {
@@ -11,24 +11,86 @@ const AttendanceView = ({ user, onBack }) => {
     const [saving, setSaving] = useState(false);
     const [search, setSearch] = useState('');
 
+    const [assignedClass, setAssignedClass] = useState(null); // { id, name }
+    const [statsFilter, setStatsFilter] = useState('all'); // 'all', 'present', 'absent'
+
     useEffect(() => {
-        const fetchStudents = async () => {
+        const fetchTeacherClassAndStudents = async () => {
             try {
-                const q = query(collection(db, `schools/${user.schoolId}/students`));
-                const querySnapshot = await getDocs(q);
-                const list = [];
-                querySnapshot.forEach((doc) => {
-                    list.push({ id: doc.id, ...doc.data() });
+                setLoading(true);
+                console.log("Searching for class assigned to:", user.email);
+
+                // Get teacher's name from teachers collection
+                const teachersQuery = query(
+                    collection(db, `schools/${user.schoolId}/teachers`),
+                    where("email", "==", user.email)
+                );
+                const teacherSnap = await getDocs(teachersQuery);
+
+                if (teacherSnap.empty) {
+                    console.error("Teacher not found in teachers collection");
+                    setLoading(false);
+                    return;
+                }
+
+                const teacherName = teacherSnap.docs[0].data().name;
+                console.log("Teacher name:", teacherName);
+
+                // Find class by teacher name
+                const allClassesSnap = await getDocs(collection(db, `schools/${user.schoolId}/classes`));
+                let foundClass = null;
+
+                allClassesSnap.forEach(classDoc => {
+                    const data = classDoc.data();
+                    console.log(`Class "${data.name}" assigned to: "${data.teacher}"`);
+
+                    if (data.teacher === teacherName) {
+                        foundClass = { id: classDoc.id, ...data };
+                        console.log("✓ Found assigned class:", data.name);
+                    }
                 });
+
+                if (!foundClass) {
+                    console.error("No class assigned to this teacher");
+                    setLoading(false);
+                    return;
+                }
+
+                setAssignedClass(foundClass);
+
+                // Fetch students from this class
+                const studentsRef = collection(db, `schools/${user.schoolId}/classes/${foundClass.id}/students`);
+                const q = query(studentsRef, orderBy('rollNo'));
+                const querySnapshot = await getDocs(q);
+
+                const list = [];
+                querySnapshot.forEach((studentDoc) => {
+                    const data = studentDoc.data();
+                    list.push({ id: studentDoc.id, ...data });
+                });
+
+                console.log(`Found ${list.length} students in ${foundClass.name}`);
+
+                // Initialize attendance from current student status
+                const initialAttendance = {};
+                list.forEach(s => {
+                    if (s.status === 'present') initialAttendance[s.id] = 'present';
+                    else if (s.status === 'absent') initialAttendance[s.id] = 'absent';
+                });
+
                 setStudents(list);
+                setAttendance(initialAttendance);
             } catch (error) {
-                console.error("Error fetching students:", error);
+                console.error("Error fetching class/students:", error);
             } finally {
                 setLoading(false);
             }
         };
-        fetchStudents();
-    }, [user.schoolId]);
+
+        if (user?.schoolId && user?.email) {
+            fetchTeacherClassAndStudents();
+        }
+    }, [user.schoolId, user.email]);
 
     const toggleStatus = (id) => {
         setAttendance(prev => ({
@@ -38,32 +100,77 @@ const AttendanceView = ({ user, onBack }) => {
     };
 
     const handleSave = async () => {
+        if (!assignedClass) return;
         setSaving(true);
         try {
-            await addDoc(collection(db, `schools/${user.schoolId}/attendance`), {
+            const batch = writeBatch(db);
+            const today = new Date().toISOString().split('T')[0];
+
+            // 1. Create historical record
+            const historyRef = doc(collection(db, `schools/${user.schoolId}/attendance`));
+            batch.set(historyRef, {
                 teacherId: user.uid,
                 teacherName: user.name || user.email,
-                date: new Date().toISOString().split('T')[0],
-                records: attendance,
+                classId: assignedClass.id,
+                className: assignedClass.name,
+                date: today,
+                records: Object.entries(attendance).map(([id, status]) => ({
+                    id,
+                    name: students.find(s => s.id === id)?.name || 'Unknown',
+                    status
+                })),
                 timestamp: serverTimestamp()
             });
-            alert("Attendance marked successfully!");
+
+            // 2. Sync to individual student docs in class sub-collection
+            students.forEach(student => {
+                const sRef = doc(db, `schools/${user.schoolId}/classes/${assignedClass.id}/students`, student.id);
+                batch.update(sRef, {
+                    status: attendance[student.id] || 'absent',
+                    updatedAt: serverTimestamp()
+                });
+            });
+
+            await batch.commit();
+            alert("Attendance marked and synced successfully!");
             onBack();
         } catch (error) {
+            console.error("Save error:", error);
             alert("Error saving attendance: " + error.message);
         } finally {
             setSaving(false);
         }
     };
 
-    const filteredStudents = students.filter(s =>
-        s.name?.toLowerCase().includes(search.toLowerCase()) ||
-        s.roll?.toLowerCase().includes(search.toLowerCase())
-    );
+    const presentCount = Object.values(attendance).filter(v => v === 'present').length;
+    const absentCount = students.length - presentCount;
+
+    const filteredStudents = students.filter(s => {
+        const matchesSearch = (
+            s.name?.toLowerCase().includes(search.toLowerCase()) ||
+            s.rollNo?.toLowerCase().includes(search.toLowerCase()) ||
+            s.roll?.toLowerCase().includes(search.toLowerCase())
+        );
+
+        const status = attendance[s.id] || 'absent';
+        if (statsFilter === 'present') return matchesSearch && status === 'present';
+        if (statsFilter === 'absent') return matchesSearch && status === 'absent';
+        return matchesSearch;
+    });
 
     if (loading) return (
         <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100dvh' }}>
             <Loader2 className="animate-spin" color="var(--primary)" size={48} />
+        </div>
+    );
+
+    if (!assignedClass && !loading) return (
+        <div className="app-container" style={{ padding: '2rem', textAlign: 'center' }}>
+            <div style={{ background: 'rgba(239, 68, 68, 0.1)', padding: '2rem', borderRadius: '24px', border: '1px solid rgba(239, 68, 68, 0.2)' }}>
+                <h3 style={{ color: '#ef4444', marginBottom: '1rem' }}>No Class Assigned</h3>
+                <p style={{ color: '#94a3b8', fontSize: '0.9rem' }}>You are not assigned to any specific class. Please contact the Principal to assign you a class.</p>
+                <button onClick={onBack} className="btn-press" style={{ marginTop: '1.5rem', padding: '0.75rem 1.5rem', borderRadius: '12px', border: 'none', background: 'var(--primary)', color: 'white' }}>Go Back</button>
+            </div>
         </div>
     );
 
@@ -82,8 +189,48 @@ const AttendanceView = ({ user, onBack }) => {
                 </button>
                 <div>
                     <h2 style={{ fontSize: '1.5rem', fontWeight: '800' }}>Mark Attendance</h2>
-                    <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>{new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</p>
+                    <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>{assignedClass.name} • {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</p>
                 </div>
+            </div>
+
+            {/* Attendance Stats Cards */}
+            <div style={{
+                display: 'grid',
+                gridTemplateColumns: '1fr 1fr',
+                gap: '1rem',
+                marginBottom: '1.5rem'
+            }}>
+                <motion.div
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => setStatsFilter(statsFilter === 'present' ? 'all' : 'present')}
+                    className="glass"
+                    style={{
+                        padding: '1.25rem',
+                        borderRadius: '24px',
+                        cursor: 'pointer',
+                        border: statsFilter === 'present' ? '2px solid #10b981' : '1px solid var(--glass-border)',
+                        background: statsFilter === 'present' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(255,255,255,0.03)'
+                    }}
+                >
+                    <p style={{ fontSize: '0.75rem', fontWeight: '600', color: '#10b981', marginBottom: '4px' }}>TOTAL PRESENTS</p>
+                    <p style={{ fontSize: '1.75rem', fontWeight: '800' }}>{presentCount}</p>
+                </motion.div>
+
+                <motion.div
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => setStatsFilter(statsFilter === 'absent' ? 'all' : 'absent')}
+                    className="glass"
+                    style={{
+                        padding: '1.25rem',
+                        borderRadius: '24px',
+                        cursor: 'pointer',
+                        border: statsFilter === 'absent' ? '2px solid #f43f5e' : '1px solid var(--glass-border)',
+                        background: statsFilter === 'absent' ? 'rgba(244, 63, 94, 0.1)' : 'rgba(255,255,255,0.03)'
+                    }}
+                >
+                    <p style={{ fontSize: '0.75rem', fontWeight: '600', color: '#f43f5e', marginBottom: '4px' }}>TOTAL ABSENTS</p>
+                    <p style={{ fontSize: '1.75rem', fontWeight: '800' }}>{absentCount}</p>
+                </motion.div>
             </div>
 
             {/* Search Bar */}
@@ -91,7 +238,7 @@ const AttendanceView = ({ user, onBack }) => {
                 <Search size={18} color="var(--text-muted)" />
                 <input
                     type="text"
-                    placeholder="Search entry..."
+                    placeholder="Search by Name or Roll No..."
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
                     style={{ background: 'none', border: 'none', color: 'white', padding: '1rem', outline: 'none', width: '100%', fontSize: '0.95rem' }}
@@ -99,45 +246,48 @@ const AttendanceView = ({ user, onBack }) => {
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', overflowY: 'auto' }}>
-                {filteredStudents.map((student, idx) => (
-                    <motion.div
-                        key={student.id}
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: idx * 0.05 }}
-                        className="glass"
-                        style={{
-                            padding: '1.15rem',
-                            borderRadius: '22px',
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            alignItems: 'center',
-                            border: attendance[student.id] === 'present' ? '1px solid var(--primary)' : '1px solid var(--glass-border)'
-                        }}
-                    >
-                        <div>
-                            <p style={{ fontWeight: '700', fontSize: '1.05rem', marginBottom: '0.2rem' }}>{student.name}</p>
-                            <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: '500' }}>Roll: {student.roll} • Class: {student.class}</p>
-                        </div>
-                        <button
-                            onClick={() => toggleStatus(student.id)}
-                            className="btn-press"
+                <AnimatePresence>
+                    {filteredStudents.map((student, idx) => (
+                        <motion.div
+                            key={student.id}
+                            initial={{ opacity: 0, y: 10 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.95 }}
+                            transition={{ delay: idx * 0.05 }}
+                            className="glass"
                             style={{
-                                width: '100px',
-                                background: attendance[student.id] === 'present' ? 'var(--primary)' : 'rgba(255,255,255,0.03)',
-                                color: attendance[student.id] === 'present' ? 'white' : 'var(--text-muted)',
-                                border: attendance[student.id] === 'present' ? 'none' : '1px solid var(--glass-border)',
-                                padding: '0.75rem',
-                                borderRadius: '14px',
-                                fontSize: '0.85rem',
-                                fontWeight: '700',
-                                boxShadow: attendance[student.id] === 'present' ? '0 4px 12px var(--primary-glow)' : 'none'
+                                padding: '1.15rem',
+                                borderRadius: '22px',
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'center',
+                                border: attendance[student.id] === 'present' ? '1px solid var(--primary)' : '1px solid var(--glass-border)'
                             }}
                         >
-                            {attendance[student.id] === 'present' ? 'PRESENT' : 'MARK'}
-                        </button>
-                    </motion.div>
-                ))}
+                            <div>
+                                <p style={{ fontWeight: '700', fontSize: '1.05rem', marginBottom: '0.2rem' }}>{student.name}</p>
+                                <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: '500' }}>Roll: {student.rollNo || student.roll || '-'} • Class: {assignedClass.name}</p>
+                            </div>
+                            <button
+                                onClick={() => toggleStatus(student.id)}
+                                className="btn-press"
+                                style={{
+                                    width: '100px',
+                                    background: attendance[student.id] === 'present' ? 'var(--primary)' : 'rgba(255,255,255,0.03)',
+                                    color: attendance[student.id] === 'present' ? 'white' : 'var(--text-muted)',
+                                    border: attendance[student.id] === 'present' ? 'none' : '1px solid var(--glass-border)',
+                                    padding: '0.75rem',
+                                    borderRadius: '14px',
+                                    fontSize: '0.85rem',
+                                    fontWeight: '700',
+                                    boxShadow: attendance[student.id] === 'present' ? '0 4px 12px var(--primary-glow)' : 'none'
+                                }}
+                            >
+                                {attendance[student.id] === 'present' ? 'PRESENT' : 'MARK'}
+                            </button>
+                        </motion.div>
+                    ))}
+                </AnimatePresence>
                 {filteredStudents.length === 0 && (
                     <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
                         No records found.

@@ -4,6 +4,7 @@ import { signInWithEmailAndPassword } from 'firebase/auth';
 import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';
 import { Shield, Mail, Lock, ArrowRight, Loader2, Database } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { motion } from 'framer-motion';
 import { seedTestData } from '../utils/seedData';
 
 const Login = () => {
@@ -27,11 +28,20 @@ const Login = () => {
             if (userDoc.exists() && userDoc.data().role === 'teacher') {
                 const schoolId = userDoc.data().schoolId;
 
+                // Store session for schoolId persistence
+                localStorage.setItem('teacher_session', JSON.stringify({
+                    uid: user.uid,
+                    schoolId: schoolId,
+                    role: 'teacher',
+                    email: user.email,
+                    name: userDoc.data().name || 'Teacher'
+                }));
+
                 // Check school status
                 const schoolSnap = await getDoc(doc(db, "schools", schoolId));
                 if (schoolSnap.exists() && schoolSnap.data().status === 'suspended') {
                     await auth.signOut();
-                    setError('System Access Denied: Your school system has been stopped by the Super Admin.');
+                    setError('Access Denied: School system suspended.');
                     return;
                 }
 
@@ -62,13 +72,6 @@ const Login = () => {
                         const storedManualPassword = schoolUserDoc.data().manualPassword;
 
                         if (storedManualPassword && storedManualPassword === password) {
-                            // Check school status before allowing manual bypass
-                            const schoolSnap = await getDoc(doc(db, "schools", schoolId));
-                            if (schoolSnap.exists() && schoolSnap.data().status === 'suspended') {
-                                setError('System Access Denied: Your school system has been stopped by the Super Admin.');
-                                return;
-                            }
-
                             localStorage.setItem('teacher_session', JSON.stringify({
                                 uid: uid,
                                 schoolId: schoolId,
@@ -85,7 +88,7 @@ const Login = () => {
                 console.error("Fallback check failed:", fallbackErr);
             }
 
-            setError("Invalid credentials. Please verify your email and password.");
+            setError("Invalid credentials. Please verify.");
         } finally {
             setLoading(false);
         }
@@ -93,46 +96,57 @@ const Login = () => {
 
     return (
         <div className="login-page" style={{
-            height: '100vh',
-            width: '100vw',
+            height: '100dvh',
+            width: '100dvw',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            background: '#0f172a',
-            fontFamily: "'Outfit', sans-serif"
+            background: 'var(--bg-dark)',
+            padding: '2rem'
         }}>
-            <div style={{ position: 'absolute', width: '400px', height: '400px', background: '#6366f1', filter: 'blur(150px)', opacity: 0.15, top: '5%', left: '5%' }}></div>
+            {/* Background Glow */}
+            <div style={{ position: 'absolute', width: '300px', height: '300px', background: 'var(--primary)', filter: 'blur(120px)', opacity: 0.1, top: '10%', right: '10%', pointerEvents: 'none' }}></div>
+            <div style={{ position: 'absolute', width: '250px', height: '250px', background: 'var(--secondary)', filter: 'blur(100px)', opacity: 0.08, bottom: '15%', left: '5%', pointerEvents: 'none' }}></div>
 
-            <div className="card glass animate-fade" style={{
-                width: '90%',
-                maxWidth: '400px',
-                padding: '2.5rem',
-                borderRadius: '24px',
-                zIndex: 10
-            }}>
-                <div style={{ textAlign: 'center', marginBottom: '2rem' }}>
-                    <div style={{ margin: '0 auto 1.25rem', width: '64px', height: '64px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, #6366f1, #06b6d4)', borderRadius: '16px' }}>
+            <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="glass"
+                style={{
+                    width: '100%',
+                    maxWidth: '400px',
+                    padding: '2.5rem 2rem',
+                    borderRadius: '32px',
+                    zIndex: 10
+                }}
+            >
+                <div style={{ textAlign: 'center', marginBottom: '2.5rem' }}>
+                    <div className="animate-pulse-glow" style={{ margin: '0 auto 1.5rem', width: '72px', height: '72px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg, var(--primary), var(--secondary))', borderRadius: '22px' }}>
                         <Shield color="white" size={32} />
                     </div>
-                    <h1 style={{ fontSize: '1.75rem', fontWeight: '700', marginBottom: '0.5rem', color: 'white' }}>Teacher Portal</h1>
-                    <p style={{ color: '#94a3b8', fontSize: '0.95rem' }}>Secure Login for School Staff</p>
+                    <h1 style={{ fontSize: '1.85rem', fontWeight: '800', marginBottom: '0.5rem', letterSpacing: '-0.02em' }}>Teacher App</h1>
+                    <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', fontWeight: '500' }}>Staff Management Portal</p>
                 </div>
 
                 {error && (
-                    <div style={{ background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.2)', color: '#f87171', padding: '0.875rem', borderRadius: '12px', marginBottom: '1.5rem', fontSize: '0.85rem', textAlign: 'center' }}>
+                    <motion.div
+                        initial={{ opacity: 0, x: -10 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        style={{ background: 'rgba(244, 63, 94, 0.1)', border: '1px solid rgba(244, 63, 94, 0.15)', color: '#fb7185', padding: '0.9rem', borderRadius: '16px', marginBottom: '1.5rem', fontSize: '0.825rem', textAlign: 'center', fontWeight: '600' }}
+                    >
                         {error}
-                    </div>
+                    </motion.div>
                 )}
 
-                <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                        <label style={{ fontSize: '0.875rem', fontWeight: '500', color: '#94a3b8' }}>Email Address</label>
+                <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+                        <label style={{ fontSize: '0.85rem', fontWeight: '600', color: 'var(--text-muted)', paddingLeft: '0.5rem' }}>Email Address</label>
                         <div style={{ position: 'relative' }}>
-                            <Mail style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: '#64748b' }} size={18} />
+                            <Mail style={{ position: 'absolute', left: '1.25rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} size={18} />
                             <input
                                 type="email"
-                                style={{ width: '100%', padding: '0.8rem 1rem 0.8rem 3rem', background: 'rgba(15, 23, 42, 0.6)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', color: 'white' }}
-                                placeholder="teacher@school.com"
+                                style={{ width: '100%', padding: '1rem 1rem 1rem 3.5rem', background: 'rgba(255, 255, 255, 0.03)', border: '1px solid var(--glass-border)', borderRadius: '18px', color: 'white', fontSize: '1rem', outline: 'none' }}
+                                placeholder="name@school.com"
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
                                 required
@@ -140,13 +154,13 @@ const Login = () => {
                         </div>
                     </div>
 
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                        <label style={{ fontSize: '0.875rem', fontWeight: '500', color: '#94a3b8' }}>Password</label>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+                        <label style={{ fontSize: '0.85rem', fontWeight: '600', color: 'var(--text-muted)', paddingLeft: '0.5rem' }}>Password</label>
                         <div style={{ position: 'relative' }}>
-                            <Lock style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: '#64748b' }} size={18} />
+                            <Lock style={{ position: 'absolute', left: '1.25rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} size={18} />
                             <input
                                 type="password"
-                                style={{ width: '100%', padding: '0.8rem 1rem 0.8rem 3rem', background: 'rgba(15, 23, 42, 0.6)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', color: 'white' }}
+                                style={{ width: '100%', padding: '1rem 1rem 1rem 3.5rem', background: 'rgba(255, 255, 255, 0.03)', border: '1px solid var(--glass-border)', borderRadius: '18px', color: 'white', fontSize: '1rem', outline: 'none' }}
                                 placeholder="••••••••"
                                 value={password}
                                 onChange={(e) => setPassword(e.target.value)}
@@ -159,23 +173,21 @@ const Login = () => {
                         type="submit"
                         disabled={loading}
                         className="btn-press"
-                        style={{ width: '100%', padding: '1rem', marginTop: '0.5rem', borderRadius: '12px', fontSize: '1rem', fontWeight: '600', border: 'none', color: 'white', background: 'linear-gradient(135deg, #6366f1, #4338ca)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.75rem' }}
+                        style={{ width: '100%', padding: '1.15rem', marginTop: '0.75rem', borderRadius: '18px', fontSize: '1.05rem', fontWeight: '700', border: 'none', color: 'white', background: 'linear-gradient(135deg, var(--primary), #4f46e5)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.75rem', boxShadow: '0 10px 20px -5px var(--primary-glow)' }}
                     >
-                        {loading ? <Loader2 className="animate-spin" size={20} /> : <>Sign In <ArrowRight size={20} /></>}
+                        {loading ? <Loader2 className="animate-spin" size={24} /> : <>Continue <ArrowRight size={20} /></>}
                     </button>
                 </form>
-                <div style={{ textAlign: 'center', marginTop: '2rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                    <p style={{ color: '#64748b', fontSize: '0.875rem' }}>
-                        Forgot password? <a href="#" style={{ color: '#6366f1', textDecoration: 'none', fontWeight: '600' }}>Contact Support</a>
-                    </p>
+
+                <div style={{ textAlign: 'center', marginTop: '2.5rem' }}>
                     <button
                         onClick={() => seedTestData()}
-                        style={{ background: 'transparent', border: 'none', color: 'rgba(255,255,255,0.2)', fontSize: '0.7rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}
+                        style={{ background: 'transparent', border: 'none', color: 'var(--text-muted)', fontSize: '0.75rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', opacity: 0.5, margin: '0 auto' }}
                     >
-                        <Database size={12} /> Seed Test Account (teacher@test.com)
+                        <Database size={13} /> Demo Account
                     </button>
                 </div>
-            </div>
+            </motion.div>
         </div>
     );
 };

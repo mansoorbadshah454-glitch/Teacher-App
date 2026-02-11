@@ -1,4 +1,4 @@
-import { db } from './firebase';
+import { db } from '../firebase';
 import { doc, setDoc, collection, addDoc } from 'firebase/firestore';
 
 export const seedTestData = async (schoolId = "TEST_SCHOOL") => {
@@ -38,6 +38,13 @@ export const seedTestData = async (schoolId = "TEST_SCHOOL") => {
                 createdAt: new Date()
             });
         }
+
+        // 4. Create School Profile (Logo)
+        await setDoc(doc(db, `schools/${schoolId}/settings`, 'profile'), {
+            name: "Test Excellence School",
+            profileImage: "https://api.dicebear.com/7.x/initials/svg?seed=TES&backgroundColor=4f46e5",
+            updatedAt: new Date()
+        });
 
         console.log("Seeding complete! Login with: teacher@test.com / password123");
         alert("Success! Use teacher@test.com / password123 to login.");

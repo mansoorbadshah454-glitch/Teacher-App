@@ -10,6 +10,7 @@ const PerformanceView = ({ user, onBack }) => {
 
     // Data State
     const [assignedClass, setAssignedClass] = useState(null);
+    const [assignedSubjects, setAssignedSubjects] = useState([]);
     const [students, setStudents] = useState([]);
     const [selectedStudent, setSelectedStudent] = useState(null);
     const [search, setSearch] = useState('');
@@ -50,7 +51,9 @@ const PerformanceView = ({ user, onBack }) => {
                     return;
                 }
 
-                const teacherName = teacherSnap.docs[0].data().name;
+                const teacherData = teacherSnap.docs[0].data();
+                const teacherName = teacherData.name;
+                setAssignedSubjects(teacherData.subjects || []);
 
                 // Find class by teacher name
                 const classesSnap = await getDocs(collection(db, `schools/${user.schoolId}/classes`));
@@ -332,26 +335,34 @@ const PerformanceView = ({ user, onBack }) => {
                                 <Trophy size={20} color="#fbbf24" /> Academic Results
                             </h3>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-                                {formData.academicScores.map((subj, idx) => (
-                                    <div key={idx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                        <span style={{ color: 'var(--text-main)', fontSize: '0.95rem', fontWeight: '500' }}>{subj.subject}</span>
-                                        <input
-                                            type="number"
-                                            min="0" max="100"
-                                            value={subj.score}
-                                            onChange={(e) => {
-                                                const newScores = [...formData.academicScores];
-                                                newScores[idx].score = parseInt(e.target.value) || 0;
-                                                setFormData({ ...formData, academicScores: newScores });
-                                            }}
-                                            style={{
-                                                background: 'rgba(255,255,255,0.03)', border: '1px solid var(--glass-border)',
-                                                color: 'white', padding: '0.6rem', borderRadius: '12px', width: '80px', textAlign: 'center',
-                                                fontWeight: '700', fontSize: '1rem', outline: 'none'
-                                            }}
-                                        />
-                                    </div>
-                                ))}
+                                {formData.academicScores.map((subj, idx) => {
+                                    const isEditable = assignedSubjects.includes(subj.subject);
+                                    return (
+                                        <div key={idx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                            <span style={{ color: 'var(--text-main)', fontSize: '0.95rem', fontWeight: '500' }}>{subj.subject}</span>
+                                            <input
+                                                type="number"
+                                                min="0" max="100"
+                                                value={subj.score}
+                                                disabled={!isEditable}
+                                                onChange={(e) => {
+                                                    const newScores = [...formData.academicScores];
+                                                    newScores[idx].score = parseInt(e.target.value) || 0;
+                                                    setFormData({ ...formData, academicScores: newScores });
+                                                }}
+                                                style={{
+                                                    background: isEditable ? 'rgba(255,255,255,0.03)' : 'rgba(255,255,255,0.01)', // Visual cue
+                                                    border: '1px solid var(--glass-border)',
+                                                    color: isEditable ? 'white' : 'rgba(255,255,255,0.3)', // Dim text if disabled
+                                                    padding: '0.6rem', borderRadius: '12px', width: '80px', textAlign: 'center',
+                                                    fontWeight: '700', fontSize: '1rem', outline: 'none',
+                                                    opacity: isEditable ? 1 : 0.5,
+                                                    cursor: isEditable ? 'text' : 'not-allowed'
+                                                }}
+                                            />
+                                        </div>
+                                    );
+                                })}
                             </div>
                         </div>
 
@@ -361,26 +372,34 @@ const PerformanceView = ({ user, onBack }) => {
                                 <ClipboardList size={20} color="#10b981" /> Homework Scores
                             </h3>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-                                {formData.homeworkScores.map((subj, idx) => (
-                                    <div key={idx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                        <span style={{ color: 'var(--text-main)', fontSize: '0.95rem', fontWeight: '500' }}>{subj.subject}</span>
-                                        <input
-                                            type="number"
-                                            min="0" max="100"
-                                            value={subj.score}
-                                            onChange={(e) => {
-                                                const newScores = [...formData.homeworkScores];
-                                                newScores[idx].score = parseInt(e.target.value) || 0;
-                                                setFormData({ ...formData, homeworkScores: newScores });
-                                            }}
-                                            style={{
-                                                background: 'rgba(255,255,255,0.03)', border: '1px solid var(--glass-border)',
-                                                color: 'white', padding: '0.6rem', borderRadius: '12px', width: '80px', textAlign: 'center',
-                                                fontWeight: '700', fontSize: '1rem', outline: 'none'
-                                            }}
-                                        />
-                                    </div>
-                                ))}
+                                {formData.homeworkScores.map((subj, idx) => {
+                                    const isEditable = assignedSubjects.includes(subj.subject);
+                                    return (
+                                        <div key={idx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                            <span style={{ color: 'var(--text-main)', fontSize: '0.95rem', fontWeight: '500' }}>{subj.subject}</span>
+                                            <input
+                                                type="number"
+                                                min="0" max="100"
+                                                value={subj.score}
+                                                disabled={!isEditable}
+                                                onChange={(e) => {
+                                                    const newScores = [...formData.homeworkScores];
+                                                    newScores[idx].score = parseInt(e.target.value) || 0;
+                                                    setFormData({ ...formData, homeworkScores: newScores });
+                                                }}
+                                                style={{
+                                                    background: isEditable ? 'rgba(255,255,255,0.03)' : 'rgba(255,255,255,0.01)',
+                                                    border: '1px solid var(--glass-border)',
+                                                    color: isEditable ? 'white' : 'rgba(255,255,255,0.3)',
+                                                    padding: '0.6rem', borderRadius: '12px', width: '80px', textAlign: 'center',
+                                                    fontWeight: '700', fontSize: '1rem', outline: 'none',
+                                                    opacity: isEditable ? 1 : 0.5,
+                                                    cursor: isEditable ? 'text' : 'not-allowed'
+                                                }}
+                                            />
+                                        </div>
+                                    );
+                                })}
                             </div>
                         </div>
 

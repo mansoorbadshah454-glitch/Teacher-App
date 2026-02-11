@@ -1,73 +1,145 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { db } from '../firebase';
-import { collection, query, onSnapshot, doc, updateDoc, getDocs } from 'firebase/firestore';
-import { ChevronLeft, User, BookOpen, Activity, Heart, Save, Loader2, Trophy, Calendar } from 'lucide-react';
+import { collection, query, onSnapshot, doc, updateDoc, getDocs, where } from 'firebase/firestore';
+import { ChevronLeft, User, BookOpen, Activity, Heart, Save, Loader2, Trophy, Calendar, Search, GraduationCap, ClipboardList, TrendingUp } from 'lucide-react';
 
 const PerformanceView = ({ user, onBack }) => {
     // Navigation State
-    const [viewState, setViewState] = useState('classes'); // 'classes', 'students', 'edit'
+    const [viewState, setViewState] = useState('list'); // 'list', 'edit'
 
     // Data State
-    const [classes, setClasses] = useState([]);
-    const [selectedClass, setSelectedClass] = useState(null);
+    const [assignedClass, setAssignedClass] = useState(null);
     const [students, setStudents] = useState([]);
     const [selectedStudent, setSelectedStudent] = useState(null);
+    const [search, setSearch] = useState('');
+
+    // Metrics State
+    const [metrics, setMetrics] = useState({
+        classScore: 0,
+        subjectScore: 0,
+        homeworkScore: 0
+    });
 
     // Edit Form State
     const [formData, setFormData] = useState({
         academicScores: [], // { subject, score }
+        homeworkScores: [], // { subject, score }
         wellness: { behavior: 80, health: 80, hygiene: 80 },
         attendance: 85
     });
 
-    const [loading, setLoading] = useState(false);
+    const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
 
-    // 1. Fetch Classes on Mount
+    // 1. Fetch Assigned Class on Mount
     useEffect(() => {
-        const fetchClasses = async () => {
+        const fetchAssignedClass = async () => {
             setLoading(true);
             try {
-                const q = query(collection(db, `schools/${user.schoolId}/classes`));
-                const snapshot = await getDocs(q);
-                const classList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                setClasses(classList.sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { numeric: true })));
+                // Get teacher's name
+                const teachersQuery = query(
+                    collection(db, `schools/${user.schoolId}/teachers`),
+                    where("email", "==", user.email)
+                );
+                const teacherSnap = await getDocs(teachersQuery);
+
+                if (teacherSnap.empty) {
+                    console.error("Teacher not found");
+                    setLoading(false);
+                    return;
+                }
+
+                const teacherName = teacherSnap.docs[0].data().name;
+
+                // Find class by teacher name
+                const classesSnap = await getDocs(collection(db, `schools/${user.schoolId}/classes`));
+                let found = null;
+                classesSnap.forEach(doc => {
+                    const data = doc.data();
+                    if (data.teacher === teacherName) {
+                        found = { id: doc.id, ...data };
+                    }
+                });
+
+                setAssignedClass(found);
             } catch (error) {
-                console.error("Error fetching classes:", error);
+                console.error("Error fetching assigned class:", error);
             } finally {
                 setLoading(false);
             }
         };
-        fetchClasses();
-    }, [user.schoolId]);
 
-    // 2. Fetch Students when Class Selected
+        if (user?.schoolId) {
+            fetchAssignedClass();
+        }
+    }, [user.schoolId, user.email]);
+
+    // 2. Fetch Students & Calculate Metrics
     useEffect(() => {
-        if (!selectedClass) return;
+        if (!assignedClass) return;
 
         setLoading(true);
-        const q = query(collection(db, `schools/${user.schoolId}/classes/${selectedClass.id}/students`));
+        const q = query(collection(db, `schools/${user.schoolId}/classes/${assignedClass.id}/students`));
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const studentList = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
             studentList.sort((a, b) => (a.rollNo || '0').localeCompare(b.rollNo || '0'));
             setStudents(studentList);
+
+            // Calculate Metrics
+            let totalSubjectScore = 0;
+            let totalHomeworkScore = 0;
+            let totalAttendance = 0;
+            let studentCount = studentList.length;
+
+            studentList.forEach(s => {
+                // Subject Score Avg
+                const subScores = s.academicScores?.map(i => parseInt(i.score) || 0) || [];
+                const subAvg = subScores.length ? subScores.reduce((a, b) => a + b, 0) / subScores.length : 0;
+                totalSubjectScore += subAvg;
+
+                // Homework Score Avg
+                const hwScores = s.homeworkScores?.map(i => parseInt(i.score) || 0) || [];
+                const hwAvg = hwScores.length ? hwScores.reduce((a, b) => a + b, 0) / hwScores.length : 0;
+                totalHomeworkScore += hwAvg;
+
+                // Attendance
+                totalAttendance += (parseInt(s.attendance) || 85);
+            });
+
+            const avgSubject = studentCount ? (totalSubjectScore / studentCount) : 0;
+            const avgHomework = studentCount ? (totalHomeworkScore / studentCount) : 0;
+            const avgAttendance = studentCount ? (totalAttendance / studentCount) : 0;
+
+            // Class Score: Weighted Average of Subject, Homework, and Attendance
+            // Logic: Subject Score (Academics) + Homework Score + Attendance Score / 3
+            // Assuming Attendance is already % (0-100)
+            const classScore = (avgSubject + avgHomework + avgAttendance) / 3;
+
+            setMetrics({
+                classScore: Math.round(classScore),
+                subjectScore: Math.round(avgSubject),
+                homeworkScore: Math.round(avgHomework)
+            });
+
             setLoading(false);
         });
 
         return () => unsubscribe();
-    }, [selectedClass, user.schoolId]);
+    }, [assignedClass, user.schoolId]);
 
     // Handlers
-    const handleClassSelect = (cls) => {
-        setSelectedClass(cls);
-        setViewState('students');
-    };
-
     const handleStudentSelect = (student) => {
         setSelectedStudent(student);
         setFormData({
             academicScores: student.academicScores || [
+                { subject: 'Math', score: 0 },
+                { subject: 'Science', score: 0 },
+                { subject: 'English', score: 0 },
+                { subject: 'Urdu', score: 0 },
+                { subject: 'Art', score: 0 }
+            ],
+            homeworkScores: student.homeworkScores || [
                 { subject: 'Math', score: 0 },
                 { subject: 'Science', score: 0 },
                 { subject: 'English', score: 0 },
@@ -82,11 +154,8 @@ const PerformanceView = ({ user, onBack }) => {
 
     const handleBack = () => {
         if (viewState === 'edit') {
-            setViewState('students');
+            setViewState('list');
             setSelectedStudent(null);
-        } else if (viewState === 'students') {
-            setViewState('classes');
-            setSelectedClass(null);
         } else {
             onBack();
         }
@@ -95,14 +164,15 @@ const PerformanceView = ({ user, onBack }) => {
     const handleSave = async () => {
         setSaving(true);
         try {
-            const studentRef = doc(db, `schools/${user.schoolId}/classes/${selectedClass.id}/students/${selectedStudent.id}`);
+            const studentRef = doc(db, `schools/${user.schoolId}/classes/${assignedClass.id}/students/${selectedStudent.id}`);
             await updateDoc(studentRef, {
                 academicScores: formData.academicScores,
+                homeworkScores: formData.homeworkScores,
                 wellness: formData.wellness,
                 attendance: formData.attendance
             });
             alert("Performance data saved!");
-            setViewState('students');
+            setViewState('list');
             setSelectedStudent(null);
         } catch (error) {
             console.error("Error updating student:", error);
@@ -111,6 +181,27 @@ const PerformanceView = ({ user, onBack }) => {
             setSaving(false);
         }
     };
+
+    const filteredStudents = students.filter(s =>
+        (s.name?.toLowerCase().includes(search.toLowerCase())) ||
+        (s.rollNo?.toLowerCase().includes(search.toLowerCase()))
+    );
+
+    if (loading && !students.length) return (
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
+            <Loader2 className="animate-spin" color="var(--primary)" size={48} />
+        </div>
+    );
+
+    if (!assignedClass && !loading) return (
+        <div className="app-container" style={{ padding: '2rem', textAlign: 'center' }}>
+            <div style={{ background: 'rgba(239, 68, 68, 0.1)', padding: '2rem', borderRadius: '24px', border: '1px solid rgba(239, 68, 68, 0.2)' }}>
+                <h3 style={{ color: '#ef4444', marginBottom: '1rem' }}>No Class Assigned</h3>
+                <p style={{ color: '#94a3b8', fontSize: '0.9rem' }}>You are not assigned to any specific class. Please contact the Principal to assign you a class.</p>
+                <button onClick={onBack} className="btn-press" style={{ marginTop: '1.5rem', padding: '0.75rem 1.5rem', borderRadius: '12px', border: 'none', background: 'var(--primary)', color: 'white' }}>Go Back</button>
+            </div>
+        </div>
+    );
 
     return (
         <motion.div
@@ -133,88 +224,98 @@ const PerformanceView = ({ user, onBack }) => {
                 </button>
                 <div>
                     <h2 style={{ fontSize: '1.5rem', fontWeight: '800' }}>
-                        {viewState === 'classes' ? 'Classes' :
-                            viewState === 'students' ? selectedClass?.name :
-                                'Performance'}
+                        {viewState === 'edit' ? selectedStudent?.name : 'Performance'}
                     </h2>
-                    {selectedStudent && <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', fontWeight: '500' }}>Editing: {selectedStudent.name}</p>}
+                    <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', fontWeight: '500' }}>
+                        {assignedClass?.name} {viewState === 'edit' && '• Editing'}
+                    </p>
                 </div>
             </div>
 
             <AnimatePresence mode="wait">
-                {viewState === 'classes' && (
+                {viewState === 'list' && (
                     <motion.div
-                        key="view-classes"
-                        initial={{ opacity: 0, scale: 0.95 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        exit={{ opacity: 0, scale: 0.95 }}
-                        style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}
-                    >
-                        {classes.map((cls, idx) => (
-                            <motion.div
-                                key={cls.id}
-                                initial={{ opacity: 0, y: 10 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                transition={{ delay: idx * 0.05 }}
-                                onClick={() => handleClassSelect(cls)}
-                                className="glass btn-press"
-                                style={{
-                                    padding: '1.5rem', borderRadius: '24px', cursor: 'pointer',
-                                    display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.75rem',
-                                    textAlign: 'center'
-                                }}
-                            >
-                                <div style={{ padding: '12px', borderRadius: '50%', background: 'rgba(99, 102, 241, 0.1)', color: 'var(--primary)', marginBottom: '0.2rem' }}>
-                                    <BookOpen size={28} />
-                                </div>
-                                <h3 style={{ fontWeight: '700', fontSize: '1.1rem' }}>{cls.name}</h3>
-                                <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: '600' }}>{cls.students || 0} Students</span>
-                            </motion.div>
-                        ))}
-                        {classes.length === 0 && !loading && (
-                            <div style={{ textAlign: 'center', color: 'var(--text-muted)', gridColumn: '1/-1', padding: '3rem' }}>No classes found.</div>
-                        )}
-                    </motion.div>
-                )}
-
-                {viewState === 'students' && (
-                    <motion.div
-                        key="view-students"
-                        initial={{ opacity: 0, x: 20 }}
+                        key="view-list"
+                        initial={{ opacity: 0, x: -20 }}
                         animate={{ opacity: 1, x: 0 }}
                         exit={{ opacity: 0, x: -20 }}
-                        style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}
+                        style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}
                     >
-                        {students.map((student, idx) => (
-                            <motion.div
-                                key={student.id}
-                                initial={{ opacity: 0, y: 10 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                transition={{ delay: idx * 0.05 }}
-                                onClick={() => handleStudentSelect(student)}
-                                className="glass btn-press"
-                                style={{
-                                    padding: '1rem', borderRadius: '22px', cursor: 'pointer',
-                                    display: 'flex', alignItems: 'center', gap: '1rem'
-                                }}
-                            >
-                                <div style={{
-                                    width: '48px', height: '48px', borderRadius: '16px', overflow: 'hidden',
-                                    border: '2px solid var(--glass-border)'
-                                }}>
-                                    <img
-                                        src={student.avatar || `https://api.dicebear.com/7.x/avataaars/svg?seed=${student.id}`}
-                                        alt={student.name}
-                                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                                    />
+                        {/* Summary Cards */}
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.75rem' }}>
+                            {/* Class Score */}
+                            <div className="glass" style={{ padding: '1rem', borderRadius: '20px', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
+                                <div style={{ marginBottom: '0.5rem', color: '#8b5cf6' }}><TrendingUp size={24} /></div>
+                                <h3 style={{ fontSize: '1.5rem', fontWeight: '800', marginBottom: '0.1rem' }}>{metrics.classScore}%</h3>
+                                <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: '600' }}>Class Score</p>
+                            </div>
+
+                            {/* Subject Score */}
+                            <div className="glass" style={{ padding: '1rem', borderRadius: '20px', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
+                                <div style={{ marginBottom: '0.5rem', color: '#f59e0b' }}><BookOpen size={24} /></div>
+                                <h3 style={{ fontSize: '1.5rem', fontWeight: '800', marginBottom: '0.1rem' }}>{metrics.subjectScore}%</h3>
+                                <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: '600' }}>Subject Score</p>
+                            </div>
+
+                            {/* Homework Score */}
+                            <div className="glass" style={{ padding: '1rem', borderRadius: '20px', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
+                                <div style={{ marginBottom: '0.5rem', color: '#10b981' }}><ClipboardList size={24} /></div>
+                                <h3 style={{ fontSize: '1.5rem', fontWeight: '800', marginBottom: '0.1rem' }}>{metrics.homeworkScore}%</h3>
+                                <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: '600' }}>Homework Score</p>
+                            </div>
+                        </div>
+
+                        {/* Search Bar */}
+                        <div className="glass" style={{ borderRadius: '18px', display: 'flex', alignItems: 'center', padding: '0.2rem 1rem' }}>
+                            <Search size={18} color="var(--text-muted)" />
+                            <input
+                                type="text"
+                                placeholder="Search students..."
+                                value={search}
+                                onChange={(e) => setSearch(e.target.value)}
+                                style={{ background: 'none', border: 'none', color: 'white', padding: '1rem', outline: 'none', width: '100%', fontSize: '0.95rem' }}
+                            />
+                        </div>
+
+                        {/* Student List */}
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                            <h3 style={{ fontSize: '1rem', fontWeight: '700', color: 'var(--text-muted)', marginLeft: '0.5rem' }}>All Students</h3>
+                            {filteredStudents.map((student, idx) => (
+                                <motion.div
+                                    key={student.id}
+                                    initial={{ opacity: 0, y: 10 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    transition={{ delay: idx * 0.05 }}
+                                    onClick={() => handleStudentSelect(student)}
+                                    className="glass btn-press"
+                                    style={{
+                                        padding: '1rem', borderRadius: '22px', cursor: 'pointer',
+                                        display: 'flex', alignItems: 'center', gap: '1rem'
+                                    }}
+                                >
+                                    <div style={{
+                                        width: '48px', height: '48px', borderRadius: '16px', overflow: 'hidden',
+                                        border: '2px solid var(--glass-border)'
+                                    }}>
+                                        <img
+                                            src={student.avatar || student.profilePic || `https://api.dicebear.com/7.x/avataaars/svg?seed=${student.id}`}
+                                            alt={student.name}
+                                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                        />
+                                    </div>
+                                    <div style={{ flex: 1 }}>
+                                        <h4 style={{ fontWeight: '700', fontSize: '1.05rem' }}>{student.name}</h4>
+                                        <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: '500' }}>Roll No: {student.rollNo || '-'}</p>
+                                    </div>
+                                    <GraduationCap size={20} color="var(--primary)" style={{ opacity: 0.6 }} />
+                                </motion.div>
+                            ))}
+                            {filteredStudents.length === 0 && (
+                                <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
+                                    No students found.
                                 </div>
-                                <div style={{ flex: 1 }}>
-                                    <h4 style={{ fontWeight: '700', fontSize: '1.05rem' }}>{student.name}</h4>
-                                    <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: '500' }}>Roll No: {student.rollNo}</p>
-                                </div>
-                                <Activity size={20} color="#10b981" style={{ opacity: 0.6 }} />
-                            </motion.div>
-                        ))}
+                            )}
+                        </div>
                     </motion.div>
                 )}
 
@@ -254,7 +355,36 @@ const PerformanceView = ({ user, onBack }) => {
                             </div>
                         </div>
 
-                        {/* 2. Wellness Metrics */}
+                        {/* 2. Homework Scores (NEW) */}
+                        <div className="glass" style={{ padding: '1.5rem', borderRadius: '28px' }}>
+                            <h3 style={{ fontSize: '1.1rem', fontWeight: '800', marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                                <ClipboardList size={20} color="#10b981" /> Homework Scores
+                            </h3>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                                {formData.homeworkScores.map((subj, idx) => (
+                                    <div key={idx} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                        <span style={{ color: 'var(--text-main)', fontSize: '0.95rem', fontWeight: '500' }}>{subj.subject}</span>
+                                        <input
+                                            type="number"
+                                            min="0" max="100"
+                                            value={subj.score}
+                                            onChange={(e) => {
+                                                const newScores = [...formData.homeworkScores];
+                                                newScores[idx].score = parseInt(e.target.value) || 0;
+                                                setFormData({ ...formData, homeworkScores: newScores });
+                                            }}
+                                            style={{
+                                                background: 'rgba(255,255,255,0.03)', border: '1px solid var(--glass-border)',
+                                                color: 'white', padding: '0.6rem', borderRadius: '12px', width: '80px', textAlign: 'center',
+                                                fontWeight: '700', fontSize: '1rem', outline: 'none'
+                                            }}
+                                        />
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* 3. Wellness Metrics */}
                         <div className="glass" style={{ padding: '1.5rem', borderRadius: '28px' }}>
                             <h3 style={{ fontSize: '1.1rem', fontWeight: '800', marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                                 <Heart size={20} color="#f472b6" /> Wellness Profile
@@ -279,7 +409,7 @@ const PerformanceView = ({ user, onBack }) => {
                             ))}
                         </div>
 
-                        {/* 3. Attendance */}
+                        {/* 4. Attendance Percentage */}
                         <div className="glass" style={{ padding: '1.5rem', borderRadius: '28px' }}>
                             <h3 style={{ fontSize: '1.1rem', fontWeight: '800', marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                                 <Calendar size={20} color="#34d399" /> Attendance Percentage
@@ -318,8 +448,6 @@ const PerformanceView = ({ user, onBack }) => {
                     </motion.div>
                 )}
             </AnimatePresence>
-
-            {loading && <div style={{ position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }}><Loader2 className="animate-spin" size={48} color="var(--primary)" /></div>}
         </motion.div>
     );
 };

@@ -28,6 +28,7 @@ import {
 } from 'lucide-react';
 import AttendanceView from '../components/AttendanceView';
 import PerformanceView from '../components/PerformanceView';
+import BottomNav from '../components/BottomNav';
 
 const Dashboard = ({ user }) => {
     const navigate = useNavigate();
@@ -391,6 +392,23 @@ const Dashboard = ({ user }) => {
         );
     }
 
+    const handleNavigation = (tab) => {
+        if (tab === 'home') {
+            setCurrentView('main');
+            setActiveTab('home');
+        } else if (tab === 'classes') {
+            setCurrentView('main');
+            setActiveTab('next');
+        } else if (tab === 'performance') {
+            setCurrentView('performance');
+        } else if (tab === 'profile') {
+            setCurrentView('main');
+            setActiveTab('profile');
+        } else if (tab === 'new-task') {
+            setCurrentView('feed');
+        }
+    };
+
     if (currentView === 'attendance') {
         return (
             <div className="app-container" style={{ padding: '1.5rem' }}>
@@ -401,8 +419,9 @@ const Dashboard = ({ user }) => {
 
     if (currentView === 'performance') {
         return (
-            <div className="app-container" style={{ padding: '1.5rem' }}>
+            <div className="app-container" style={{ padding: '1.5rem', paddingBottom: '100px' }}>
                 <PerformanceView user={user} onBack={() => setCurrentView('main')} />
+                <BottomNav activeTab="performance" setActiveTab={handleNavigation} />
             </div>
         );
     }
@@ -589,6 +608,7 @@ const Dashboard = ({ user }) => {
                         </div>
                     ))}
                 </div>
+                <BottomNav activeTab="new-task" setActiveTab={handleNavigation} />
             </div>
         )
     }
@@ -770,63 +790,9 @@ const Dashboard = ({ user }) => {
                 </motion.main>
             </AnimatePresence>
 
-            {/* Bottom Navigation */}
-            <footer style={{
-                position: 'fixed',
-                bottom: '1rem',
-                left: '1rem',
-                right: '1rem',
-                height: '75px',
-                maxWidth: 'calc(500px - 2rem)',
-                margin: '0 auto',
-                borderRadius: '24px',
-                display: 'flex',
-                justifyContent: 'space-around',
-                alignItems: 'center',
-                padding: '0 0.5rem',
-                zIndex: 100,
-                boxShadow: '0 20px 40px rgba(0,0,0,0.4)'
-            }} className="glass">
-                <NavIcon icon={Home} label="Home" active={activeTab === 'home'} onClick={() => setActiveTab('home')} />
-                <NavIcon icon={Clock} label="Next Class" active={activeTab === 'next'} onClick={() => setActiveTab('next')} />
-                <div style={{
-                    marginTop: '-35px',
-                    background: 'var(--primary)',
-                    width: '60px',
-                    height: '60px',
-                    borderRadius: '50%',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    boxShadow: '0 8px 20px var(--primary-glow)',
-                    border: '5px solid var(--bg-dark)',
-                    cursor: 'pointer'
-                }}>
-                    <BookOpen color="white" size={26} />
-                </div>
-                <NavIcon icon={Bell} label="Notifications" active={activeTab === 'notif'} onClick={() => setActiveTab('notif')} />
-                <NavIcon icon={User} label="Profile" active={activeTab === 'profile'} onClick={() => setActiveTab('profile')} />
-            </footer>
+            <BottomNav activeTab={activeTab === 'home' || activeTab === 'next' || activeTab === 'notif' || activeTab === 'profile' ? activeTab : 'home'} setActiveTab={setActiveTab} />
         </div>
     );
 };
-
-const NavIcon = ({ icon: Icon, label, active, onClick }) => (
-    <motion.div
-        whileTap={{ scale: 0.8 }}
-        onClick={onClick}
-        style={{
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            gap: '4px',
-            color: active ? 'var(--primary)' : 'var(--text-muted)',
-            cursor: 'pointer'
-        }}
-    >
-        <Icon size={24} />
-        <span style={{ fontSize: '0.65rem', fontWeight: '600' }}>{label}</span>
-    </motion.div>
-);
 
 export default Dashboard;

@@ -218,7 +218,7 @@ const NextClassView = ({ user, onBack }) => {
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -20 }}
-            style={{ display: 'flex', flexDirection: 'column', height: '100%', paddingBottom: '100px' }}
+            style={{ display: 'flex', flexDirection: 'column', minHeight: '100%', paddingBottom: '160px' }}
         >
             {/* Header */}
             <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1.5rem', paddingTop: '1rem' }}>
@@ -419,6 +419,8 @@ const NextClassView = ({ user, onBack }) => {
                     </motion.div>
                 )}
             </AnimatePresence>
+
+            <div style={{ height: '120px', flexShrink: 0 }}></div>
 
             {/* Floating Save Button */}
             <AnimatePresence>

@@ -616,7 +616,7 @@ const Dashboard = ({ user }) => {
 
     if (currentView === 'next-class') {
         return (
-            <div className="app-container" style={{ padding: '1.5rem', paddingBottom: '20px' }}>
+            <div className="app-container" style={{ padding: '1.5rem', paddingBottom: '120px' }}>
                 <NextClassView user={user} onBack={() => setCurrentView('main')} />
                 <BottomNav activeTab="next" setActiveTab={handleNavigation} />
             </div>

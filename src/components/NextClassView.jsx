@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { db } from '../firebase';
-import { collection, query, onSnapshot, doc, updateDoc, writeBatch, orderBy, getDocs } from 'firebase/firestore';
+import { collection, query, onSnapshot, doc, updateDoc, writeBatch, orderBy, getDocs, where, limit } from 'firebase/firestore';
 import { ChevronLeft, Users, BookOpen, Save, Loader2, Search, Sliders, ChevronRight } from 'lucide-react';
 
 const NextClassView = ({ user, onBack }) => {
@@ -16,6 +16,7 @@ const NextClassView = ({ user, onBack }) => {
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
+    const [absentCount, setAbsentCount] = useState(0);
 
     // Score State: Map of studentId -> { academicScore, homeworkScore }
     // We only track CHANGED scores to save bandwidth/reads
@@ -68,6 +69,32 @@ const NextClassView = ({ user, onBack }) => {
         return () => unsubscribe();
     }, [selectedClass, selectedSubject, user?.schoolId]);
 
+    // 3. Fetch Today's Absent Count
+    useEffect(() => {
+        if (!selectedClass || !user?.schoolId) return;
+
+        const today = new Date().toISOString().split('T')[0];
+        const q = query(
+            collection(db, `schools/${user.schoolId}/attendance`),
+            where('classId', '==', selectedClass.id),
+            where('date', '==', today),
+            orderBy('timestamp', 'desc'),
+            limit(1)
+        );
+
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            if (!snapshot.empty) {
+                const data = snapshot.docs[0].data();
+                const absentDetails = data.records?.filter(r => r.status === 'absent') || [];
+                setAbsentCount(absentDetails.length);
+            } else {
+                setAbsentCount(0);
+            }
+        });
+
+        return () => unsubscribe();
+    }, [selectedClass, user?.schoolId]);
+
     // Handlers
     const handleClassSelect = (cls) => {
         setSelectedClass(cls);
@@ -87,6 +114,7 @@ const NextClassView = ({ user, onBack }) => {
         } else if (viewState === 'subjects') {
             setViewState('classes');
             setSelectedClass(null);
+            setAbsentCount(0);
         } else {
             onBack();
         }
@@ -214,7 +242,7 @@ const NextClassView = ({ user, onBack }) => {
                     <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', fontWeight: '500' }}>
                         {viewState === 'classes' ? 'Select a class to manage' :
                             viewState === 'subjects' ? 'Select a subject' :
-                                `${selectedClass?.name} • ${students.length} Students`}
+                                `${selectedClass?.name} • ${students.length} Students • ${absentCount} Absent Today`}
                     </p>
                 </div>
             </div>

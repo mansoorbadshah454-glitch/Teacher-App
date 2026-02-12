@@ -28,6 +28,7 @@ import {
 } from 'lucide-react';
 import AttendanceView from '../components/AttendanceView';
 import PerformanceView from '../components/PerformanceView';
+import NextClassView from '../components/NextClassView';
 import BottomNav from '../components/BottomNav';
 
 const Dashboard = ({ user }) => {
@@ -358,7 +359,7 @@ const Dashboard = ({ user }) => {
         { id: 'attendance', title: 'Attendance', icon: UserCheck, color: '#6366f1', description: 'Mark today\'s presence', action: () => setCurrentView('attendance') },
         { id: 'news-feed', title: 'News Feed', icon: FileText, color: '#10b981', description: 'School announcements', action: () => setCurrentView('feed') },
         { id: 'performance', title: 'Performance', icon: BarChart3, color: '#8b5cf6', description: 'Update student scores', action: () => setCurrentView('performance') },
-        { id: 'next-class', title: 'Next Class', icon: Clock, color: '#f43f5e', description: 'Class 10-A • 10:30 AM', action: () => alert("Class schedule coming soon!") },
+        { id: 'next-class', title: 'Next Class', icon: Clock, color: '#f43f5e', description: 'Class 10-A • 10:30 AM', action: () => setCurrentView('next-class') },
     ];
 
     const handleLogout = () => {
@@ -611,6 +612,15 @@ const Dashboard = ({ user }) => {
                 <BottomNav activeTab="new-task" setActiveTab={handleNavigation} />
             </div>
         )
+    }
+
+    if (currentView === 'next-class') {
+        return (
+            <div className="app-container" style={{ padding: '1.5rem', paddingBottom: '20px' }}>
+                <NextClassView user={user} onBack={() => setCurrentView('main')} />
+                <BottomNav activeTab="next" setActiveTab={handleNavigation} />
+            </div>
+        );
     }
 
     return (

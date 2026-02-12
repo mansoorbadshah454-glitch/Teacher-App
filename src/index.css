@@ -78,6 +78,12 @@
   --perf-icon-2: #ffffff;
   --perf-icon-3: #ffffff;
   --perf-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+
+  /* Next Class Score Accents (Light Mode Only) */
+  --subject-score-accent: #3b82f6;
+  /* Blue */
+  --homework-score-accent: #eab308;
+  /* Yellow */
 }
 
 * {

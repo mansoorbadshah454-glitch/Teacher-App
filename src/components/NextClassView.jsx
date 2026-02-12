@@ -263,10 +263,19 @@ const NextClassView = ({ user, onBack }) => {
                             <div
                                 key={cls.id}
                                 onClick={() => handleClassSelect(cls)}
-                                className="glass btn-press"
+                                className="btn-press"
                                 style={{
-                                    padding: '1.5rem', borderRadius: '20px', cursor: 'pointer',
-                                    display: 'flex', flexDirection: 'column', gap: '0.5rem'
+                                    padding: '1.5rem',
+                                    borderRadius: '24px',
+                                    cursor: 'pointer',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    gap: '0.5rem',
+                                    background: 'var(--card-bg)',
+                                    border: '1px solid var(--glass-border)',
+                                    boxShadow: '0 10px 30px -5px rgba(0, 0, 0, 0.3)', // Darker, Prime 2D shadow
+                                    position: 'relative',
+                                    overflow: 'hidden'
                                 }}
                             >
                                 <div style={{
@@ -382,15 +391,16 @@ const NextClassView = ({ user, onBack }) => {
                                             <div>
                                                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.25rem', fontSize: '0.8rem', fontWeight: '600' }}>
                                                     <span style={{ color: 'var(--text-muted)' }}>Subject Score</span>
-                                                    <span style={{ color: getScoreColor(acScore) }}>{acScore}%</span>
+                                                    <span style={{ color: 'var(--subject-score-accent, ' + getScoreColor(acScore) + ')' }}>{acScore}%</span>
                                                 </div>
                                                 <input
                                                     type="range" min="0" max="100"
                                                     value={acScore}
                                                     onChange={(e) => handleScoreChange(student.id, 'academic', e.target.value)}
+                                                    className="custom-slider"
                                                     style={{
-                                                        width: '100%', height: '6px', borderRadius: '3px',
-                                                        accentColor: getScoreColor(acScore), cursor: 'pointer'
+                                                        '--slider-color': 'var(--subject-score-accent, ' + getScoreColor(acScore) + ')',
+                                                        '--slider-value': acScore + '%'
                                                     }}
                                                 />
                                             </div>
@@ -399,15 +409,16 @@ const NextClassView = ({ user, onBack }) => {
                                             <div>
                                                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.25rem', fontSize: '0.8rem', fontWeight: '600' }}>
                                                     <span style={{ color: 'var(--text-muted)' }}>Homework Score</span>
-                                                    <span style={{ color: getScoreColor(hwScore) }}>{hwScore}%</span>
+                                                    <span style={{ color: 'var(--homework-score-accent, ' + getScoreColor(hwScore) + ')' }}>{hwScore}%</span>
                                                 </div>
                                                 <input
                                                     type="range" min="0" max="100"
                                                     value={hwScore}
                                                     onChange={(e) => handleScoreChange(student.id, 'homework', e.target.value)}
+                                                    className="custom-slider"
                                                     style={{
-                                                        width: '100%', height: '6px', borderRadius: '3px',
-                                                        accentColor: getScoreColor(hwScore), cursor: 'pointer'
+                                                        '--slider-color': 'var(--homework-score-accent, ' + getScoreColor(hwScore) + ')',
+                                                        '--slider-value': hwScore + '%'
                                                     }}
                                                 />
                                             </div>

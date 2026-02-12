@@ -13,6 +13,71 @@
   --font-main: 'Outfit', sans-serif;
   --safe-top: env(safe-area-inset-top, 20px);
   --safe-bottom: env(safe-area-inset-bottom, 20px);
+
+  /* Semantic UI Colors (Default/Dark) */
+  --nav-bg: var(--card-bg);
+  --nav-icon: var(--text-muted);
+  --nav-active: var(--primary);
+  --header-bg: rgba(255, 255, 255, 0.03);
+  --header-text: var(--text-main);
+  --back-btn-bg: var(--card-bg);
+  --back-btn-text: white;
+  --card-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.1);
+  --header-subtext: var(--text-muted);
+  --duty-bg-on: rgba(16, 185, 129, 0.1);
+  --duty-bg-off: rgba(239, 68, 68, 0.1);
+
+  /* Performance Card Variables (Default/Dark) */
+  --perf-bg-1: var(--card-bg);
+  --perf-bg-2: var(--card-bg);
+  --perf-bg-3: var(--card-bg);
+  --perf-title: var(--text-main);
+  --perf-text: var(--text-muted);
+  --perf-icon-1: #8b5cf6;
+  --perf-icon-2: #f59e0b;
+  --perf-icon-3: #10b981;
+  --perf-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+[data-theme="light"] {
+  --bg-dark: #f0f2f5;
+  --card-bg: rgba(255, 255, 255, 0.9);
+  --glass-border: rgba(0, 0, 0, 0.05);
+  --text-main: #1e293b;
+  --text-muted: #64748b;
+  --primary-glow: rgba(99, 102, 241, 0.2);
+
+  /* Semantic UI Colors (Light Mode Overrides) */
+  --nav-bg: #6366f1;
+  /* Purple Nav */
+  --nav-icon: rgba(255, 255, 255, 0.7);
+  --nav-active: #ffffff;
+  --header-bg: #6366f1;
+  /* Purple Header */
+  --header-text: #ffffff;
+  --back-btn-bg: white;
+  --back-btn-text: var(--primary);
+  /* Purple Arrow */
+  --card-shadow: 0 10px 40px -10px rgba(99, 102, 241, 0.2);
+  /* Enhanced Shadow */
+  /* Enhanced Shadow */
+  --header-subtext: rgba(255, 255, 255, 0.8);
+  --duty-bg-on: #ffffff;
+  --duty-bg-off: #ffffff;
+
+  /* Performance Card Variables (Light Mode Overrides) */
+  --perf-bg-1: #6366f1;
+  /* Blue */
+  --perf-bg-2: #10b981;
+  /* Green */
+  --perf-bg-3: #eab308;
+  /* Green */
+  --perf-title: #ffffff;
+  --perf-text: #ffffff;
+  --perf-icon-1: #ffffff;
+  --perf-icon-2: #ffffff;
+  --perf-icon-3: #ffffff;
+  --perf-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
 }
 
 * {
@@ -31,6 +96,7 @@ body {
   height: 100vh;
   width: 100vw;
   overscroll-behavior: none;
+  transition: background 0.3s ease, color 0.3s ease;
 }
 
 #root {
@@ -48,6 +114,7 @@ body {
   overflow-x: hidden;
   display: flex;
   flex-direction: column;
+  transition: background 0.3s ease;
 }
 
 .glass {
@@ -55,11 +122,19 @@ body {
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   border: 1px solid var(--glass-border);
-  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.1);
+  transition: background 0.3s ease, border-color 0.3s ease;
 }
 
 .text-gradient {
   background: linear-gradient(135deg, #fff 0%, #6366f1 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+[data-theme="light"] .text-gradient {
+  background: linear-gradient(135deg, #1e293b 0%, #6366f1 100%);
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
@@ -72,6 +147,51 @@ body {
 .btn-press:active {
   transform: scale(0.92);
   opacity: 0.8;
+}
+
+/* Custom Slider Styling */
+.custom-slider {
+  -webkit-appearance: none;
+  width: 100%;
+  height: 6px;
+  background: transparent;
+  outline: none;
+  border-radius: 3px;
+  margin: 10px 0;
+  cursor: pointer;
+}
+
+/* Track */
+.custom-slider::-webkit-slider-runnable-track {
+  width: 100%;
+  height: 8px;
+  /* Slightly thicker for the border effect */
+  background: linear-gradient(to right, var(--slider-color) 0%, var(--slider-color) var(--slider-value), transparent var(--slider-value), transparent 100%);
+  border-radius: 4px;
+  border: 1px solid var(--slider-color);
+  /* The "outer same color" */
+}
+
+/* Thumb */
+.custom-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  height: 16px;
+  width: 16px;
+  border-radius: 50%;
+  background: var(--slider-color);
+  margin-top: -5px;
+  /* Centers thumb on track */
+  box-shadow: 0 0 5px rgba(0, 0, 0, 0.2);
+  transition: transform 0.1s;
+}
+
+.custom-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.1);
+}
+
+.custom-slider:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 /* Custom Scrollbar */

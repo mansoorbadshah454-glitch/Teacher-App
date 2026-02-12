@@ -24,7 +24,9 @@ import {
     Users,
     ThumbsUp,
     Share2,
-    Calendar
+    Calendar,
+    Sun,
+    Moon
 } from 'lucide-react';
 import AttendanceView from '../components/AttendanceView';
 import PerformanceView from '../components/PerformanceView';
@@ -41,6 +43,8 @@ const Dashboard = ({ user }) => {
     const [loading, setLoading] = useState(true);
     const [schoolInfo, setSchoolInfo] = useState({ name: '', logo: '' });
     const [posts, setPosts] = useState([]);
+    const [teacherProfile, setTeacherProfile] = useState({ assignedClasses: [], subjects: [] });
+    const [theme, setTheme] = useState('dark');
 
     // Posting State
     const [postText, setPostText] = useState('');
@@ -68,6 +72,20 @@ const Dashboard = ({ user }) => {
         return currentDate > lastDate;
     };
 
+    // Theme Logic
+    useEffect(() => {
+        const savedTheme = localStorage.getItem('teacher_theme') || 'dark';
+        setTheme(savedTheme);
+        document.documentElement.setAttribute('data-theme', savedTheme);
+    }, []);
+
+    const toggleTheme = () => {
+        const newTheme = theme === 'dark' ? 'light' : 'dark';
+        setTheme(newTheme);
+        localStorage.setItem('teacher_theme', newTheme);
+        document.documentElement.setAttribute('data-theme', newTheme);
+    };
+
     useEffect(() => {
         if (user && user.schoolId) {
             // Check suspension status
@@ -86,6 +104,13 @@ const Dashboard = ({ user }) => {
                 if (docSnap.exists()) {
                     const data = docSnap.data();
                     const dutyStatus = data.isOnDuty || false;
+
+                    // Update profile data in real-time
+                    setTeacherProfile({
+                        assignedClasses: Array.isArray(data.assignedClasses) ? data.assignedClasses : (data.assignedClass ? [data.assignedClass] : []),
+                        subjects: Array.isArray(data.subjects) ? data.subjects : (data.subject ? [data.subject] : [])
+                    });
+
                     const lastDutyUpdate = data.lastDutyUpdate;
                     const hasPendingWrites = docSnap.metadata.hasPendingWrites;
 
@@ -630,8 +655,12 @@ const Dashboard = ({ user }) => {
                 display: 'flex',
                 justifyContent: 'space-between',
                 alignItems: 'center',
-                marginBottom: '2rem',
-                marginTop: 'var(--safe-area-inset-top)'
+                marginTop: 'var(--safe-area-inset-top)',
+                background: 'var(--header-bg)',
+                color: 'var(--header-text)',
+                padding: '1rem',
+                borderRadius: '24px',
+                transition: 'all 0.3s ease'
             }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
                     <div style={{
@@ -650,14 +679,14 @@ const Dashboard = ({ user }) => {
                     </div>
                     <div>
                         <h1 style={{ fontSize: '1.25rem', fontWeight: '700' }}>Hello, {user.name?.split(' ')[0] || 'Teacher'}!</h1>
-                        <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Good Morning 👋</p>
+                        <p style={{ fontSize: '0.85rem', color: 'var(--header-subtext)' }}>Good Morning 👋</p>
                     </div>
                 </div>
 
                 <button
                     onClick={handleDutyToggle}
                     style={{
-                        background: isOnDuty ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)',
+                        background: isOnDuty ? 'var(--duty-bg-on)' : 'var(--duty-bg-off)',
                         border: `1px solid ${isOnDuty ? 'rgba(16, 185, 129, 0.2)' : 'rgba(239, 68, 68, 0.2)'}`,
                         color: isOnDuty ? '#10b981' : '#ef4444',
                         padding: '0.6rem 1rem',
@@ -705,7 +734,8 @@ const Dashboard = ({ user }) => {
                                             gap: '0.75rem',
                                             cursor: 'pointer',
                                             position: 'relative',
-                                            overflow: 'hidden'
+                                            overflow: 'hidden',
+                                            boxShadow: 'var(--card-shadow)'
                                         }}
                                     >
                                         <div style={{
@@ -729,28 +759,7 @@ const Dashboard = ({ user }) => {
                                 ))}
                             </div>
 
-                            {/* Logout Action */}
-                            <button
-                                onClick={handleLogout}
-                                style={{
-                                    width: '100%',
-                                    padding: '1rem',
-                                    borderRadius: '16px',
-                                    border: '1px solid rgba(239, 68, 68, 0.2)',
-                                    background: 'rgba(239, 68, 68, 0.05)',
-                                    color: '#f87171',
-                                    fontWeight: '600',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    gap: '0.5rem',
-                                    cursor: 'pointer',
-                                    marginBottom: '2rem'
-                                }}
-                                className="btn-press"
-                            >
-                                <LogOut size={18} /> Logout Session
-                            </button>
+
                         </>
                     )}
 
@@ -776,6 +785,88 @@ const Dashboard = ({ user }) => {
                                 <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', marginBottom: '1.5rem' }}>{user.email}</p>
                                 <div style={{ background: 'rgba(255,255,255,0.03)', padding: '1rem', borderRadius: '16px', border: '1px solid var(--glass-border)' }}>
                                     <p style={{ fontSize: '0.8rem', color: 'var(--primary)', fontWeight: '700' }}>{schoolInfo.name || 'School System'}</p>
+                                </div>
+
+                                {/* Assigned Data */}
+                                <div style={{ textAlign: 'left', width: '100%', marginBottom: '1.5rem' }}>
+
+                                    <h3 style={{ fontSize: '1rem', fontWeight: '700', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                        <BookOpen size={18} color="var(--primary)" /> Academic Details
+                                    </h3>
+
+                                    <div style={{ display: 'grid', gap: '1rem' }}>
+                                        <div className="glass" style={{ padding: '1rem', borderRadius: '16px' }}>
+                                            <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.4rem' }}>Assigned Classes</p>
+                                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                                                {teacherProfile.assignedClasses.length > 0 ? (
+                                                    teacherProfile.assignedClasses.map((cls, idx) => (
+                                                        <span key={idx} style={{
+                                                            fontSize: '0.85rem', fontWeight: '600',
+                                                            background: 'rgba(99, 102, 241, 0.15)', color: 'var(--primary)',
+                                                            padding: '0.3rem 0.8rem', borderRadius: '8px'
+                                                        }}>
+                                                            {cls}
+                                                        </span>
+                                                    ))
+                                                ) : (
+                                                    <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>No classes assigned</span>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        <div className="glass" style={{ padding: '1rem', borderRadius: '16px' }}>
+                                            <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '0.4rem' }}>Subject Specialization</p>
+                                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                                                {teacherProfile.subjects.length > 0 ? (
+                                                    teacherProfile.subjects.map((subj, idx) => (
+                                                        <span key={idx} style={{
+                                                            fontSize: '0.85rem', fontWeight: '600',
+                                                            background: 'rgba(6, 182, 212, 0.15)', color: 'var(--secondary)',
+                                                            padding: '0.3rem 0.8rem', borderRadius: '8px'
+                                                        }}>
+                                                            {subj}
+                                                        </span>
+                                                    ))
+                                                ) : (
+                                                    <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)' }}>No subjects assigned</span>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Theme Toggle */}
+                                <div className="glass" style={{
+                                    padding: '1rem', borderRadius: '16px', marginBottom: '1.5rem',
+                                    display: 'flex', justifyContent: 'space-between', alignItems: 'center'
+                                }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.8rem' }}>
+                                        <div style={{
+                                            width: '36px', height: '36px', borderRadius: '10px',
+                                            background: theme === 'dark' ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.05)',
+                                            display: 'flex', alignItems: 'center', justifyContent: 'center'
+                                        }}>
+                                            {theme === 'dark' ? <Moon size={20} /> : <Sun size={20} color="orange" />}
+                                        </div>
+                                        <span style={{ fontWeight: '600', fontSize: '0.95rem' }}>Dark Mode</span>
+                                    </div>
+                                    <button
+                                        onClick={toggleTheme}
+                                        style={{
+                                            width: '50px', height: '28px', borderRadius: '20px',
+                                            background: theme === 'dark' ? 'var(--primary)' : '#cbd5e1',
+                                            position: 'relative', cursor: 'pointer', border: 'none',
+                                            transition: 'background 0.3s'
+                                        }}
+                                    >
+                                        <div style={{
+                                            width: '22px', height: '22px', borderRadius: '50%',
+                                            background: 'white', position: 'absolute', top: '3px',
+                                            left: theme === 'dark' ? '25px' : '3px',
+                                            transition: 'left 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                                            boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+                                        }} />
+                                    </button>
                                 </div>
                             </div>
 

@@ -226,7 +226,7 @@ const NextClassView = ({ user, onBack }) => {
                     onClick={handleBack}
                     className="btn-press"
                     style={{
-                        background: 'var(--card-bg)', border: 'none', color: 'white',
+                        background: 'var(--back-btn-bg)', border: 'none', color: 'var(--back-btn-text)',
                         width: '44px', height: '44px', borderRadius: '14px',
                         display: 'flex', alignItems: 'center', justifyContent: 'center'
                     }}

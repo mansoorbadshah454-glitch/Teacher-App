@@ -13,7 +13,7 @@ const NavIcon = ({ icon: Icon, label, active, onClick }) => (
             flexDirection: 'column',
             alignItems: 'center',
             gap: '4px',
-            color: active ? 'var(--primary)' : 'var(--text-muted)',
+            color: active ? 'var(--nav-active)' : 'var(--nav-icon)',
             cursor: 'pointer',
             padding: '0.5rem',
             position: 'relative'
@@ -29,7 +29,7 @@ const NavIcon = ({ icon: Icon, label, active, onClick }) => (
                     width: '4px',
                     height: '4px',
                     borderRadius: '50%',
-                    background: 'var(--primary)'
+                    background: 'var(--nav-active)'
                 }}
             />
         )}
@@ -93,7 +93,8 @@ const BottomNav = ({ activeTab, setActiveTab }) => {
                         padding: '0 0.5rem',
                         zIndex: 9999, // High z-index to stay on top
                         boxShadow: '0 10px 30px rgba(0,0,0,0.5)',
-                        border: '1px solid rgba(255,255,255,0.1)'
+                        border: '1px solid rgba(255,255,255,0.1)',
+                        background: 'var(--nav-bg)'
                     }}
                     className="glass"
                 >

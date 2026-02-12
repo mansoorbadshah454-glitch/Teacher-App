@@ -344,7 +344,7 @@ const PerformanceView = ({ user, onBack }) => {
                     onClick={handleBack}
                     className="btn-press"
                     style={{
-                        background: 'var(--card-bg)', border: 'none', color: 'white',
+                        background: 'var(--back-btn-bg)', border: 'none', color: 'var(--back-btn-text)',
                         width: '44px', height: '44px', borderRadius: '14px',
                         display: 'flex', alignItems: 'center', justifyContent: 'center'
                     }}
@@ -373,24 +373,39 @@ const PerformanceView = ({ user, onBack }) => {
                         {/* Summary Cards */}
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.75rem' }}>
                             {/* Class Score */}
-                            <div className="glass" style={{ padding: '1rem', borderRadius: '20px', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
-                                <div style={{ marginBottom: '0.5rem', color: '#8b5cf6' }}><TrendingUp size={24} /></div>
-                                <h3 style={{ fontSize: '1.5rem', fontWeight: '800', marginBottom: '0.1rem' }}>{metrics.classScore}%</h3>
-                                <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: '600' }}>Class Score</p>
+                            {/* Class Score */}
+                            <div className="glass" style={{
+                                padding: '1rem', borderRadius: '20px', display: 'flex', flexDirection: 'column',
+                                alignItems: 'center', textAlign: 'center', background: 'var(--perf-bg-1)',
+                                boxShadow: 'var(--perf-shadow)'
+                            }}>
+                                <div style={{ marginBottom: '0.5rem', color: 'var(--perf-icon-1)' }}><TrendingUp size={24} /></div>
+                                <h3 style={{ fontSize: '1.5rem', fontWeight: '800', marginBottom: '0.1rem', color: 'var(--perf-title)' }}>{metrics.classScore}%</h3>
+                                <p style={{ fontSize: '0.7rem', color: 'var(--perf-text)', fontWeight: '600' }}>Class Score</p>
                             </div>
 
                             {/* Subject Score */}
-                            <div className="glass" style={{ padding: '1rem', borderRadius: '20px', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
-                                <div style={{ marginBottom: '0.5rem', color: '#f59e0b' }}><BookOpen size={24} /></div>
-                                <h3 style={{ fontSize: '1.5rem', fontWeight: '800', marginBottom: '0.1rem' }}>{metrics.subjectScore}%</h3>
-                                <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: '600' }}>Subject Score</p>
+                            {/* Subject Score */}
+                            <div className="glass" style={{
+                                padding: '1rem', borderRadius: '20px', display: 'flex', flexDirection: 'column',
+                                alignItems: 'center', textAlign: 'center', background: 'var(--perf-bg-2)',
+                                boxShadow: 'var(--perf-shadow)'
+                            }}>
+                                <div style={{ marginBottom: '0.5rem', color: 'var(--perf-icon-2)' }}><BookOpen size={24} /></div>
+                                <h3 style={{ fontSize: '1.5rem', fontWeight: '800', marginBottom: '0.1rem', color: 'var(--perf-title)' }}>{metrics.subjectScore}%</h3>
+                                <p style={{ fontSize: '0.7rem', color: 'var(--perf-text)', fontWeight: '600' }}>Subject Score</p>
                             </div>
 
                             {/* Homework Score */}
-                            <div className="glass" style={{ padding: '1rem', borderRadius: '20px', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }}>
-                                <div style={{ marginBottom: '0.5rem', color: '#10b981' }}><ClipboardList size={24} /></div>
-                                <h3 style={{ fontSize: '1.5rem', fontWeight: '800', marginBottom: '0.1rem' }}>{metrics.homeworkScore}%</h3>
-                                <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: '600' }}>Homework Score</p>
+                            {/* Homework Score */}
+                            <div className="glass" style={{
+                                padding: '1rem', borderRadius: '20px', display: 'flex', flexDirection: 'column',
+                                alignItems: 'center', textAlign: 'center', background: 'var(--perf-bg-3)',
+                                boxShadow: 'var(--perf-shadow)'
+                            }}>
+                                <div style={{ marginBottom: '0.5rem', color: 'var(--perf-icon-3)' }}><ClipboardList size={24} /></div>
+                                <h3 style={{ fontSize: '1.5rem', fontWeight: '800', marginBottom: '0.1rem', color: 'var(--perf-title)' }}>{metrics.homeworkScore}%</h3>
+                                <p style={{ fontSize: '0.7rem', color: 'var(--perf-text)', fontWeight: '600' }}>Homework Score</p>
                             </div>
                         </div>
 
@@ -458,48 +473,10 @@ const PerformanceView = ({ user, onBack }) => {
                         {/* 1. Academic Scores */}
                         <div className="glass" style={{ padding: '1.5rem', borderRadius: '28px' }}>
                             <h3 style={{ fontSize: '1.1rem', fontWeight: '800', marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                                <Trophy size={20} color="#fbbf24" /> Academic Results
+                                <Trophy size={20} color="#10b981" /> Academic Results
                             </h3>
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
                                 {formData.academicScores.map((subj, idx) => {
-                                    const isEditable = assignedSubjects.includes(subj.subject);
-                                    return (
-                                        <div key={idx} style={{ marginBottom: '1rem' }}>
-                                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem', fontSize: '0.9rem', fontWeight: '600' }}>
-                                                <span style={{ color: 'var(--text-main)' }}>{subj.subject}</span>
-                                                <span style={{ color: isEditable ? '#fbbf24' : 'var(--text-muted)' }}>{subj.score}%</span>
-                                            </div>
-                                            <input
-                                                type="range"
-                                                min="0" max="100"
-                                                value={subj.score}
-                                                disabled={!isEditable}
-                                                onChange={(e) => {
-                                                    const newScores = [...formData.academicScores];
-                                                    newScores[idx].score = parseInt(e.target.value) || 0;
-                                                    setFormData({ ...formData, academicScores: newScores });
-                                                }}
-                                                style={{
-                                                    width: '100%',
-                                                    accentColor: '#fbbf24',
-                                                    height: '6px',
-                                                    opacity: isEditable ? 1 : 0.4,
-                                                    cursor: isEditable ? 'pointer' : 'not-allowed'
-                                                }}
-                                            />
-                                        </div>
-                                    );
-                                })}
-                            </div>
-                        </div>
-
-                        {/* 2. Homework Scores (NEW) */}
-                        <div className="glass" style={{ padding: '1.5rem', borderRadius: '28px' }}>
-                            <h3 style={{ fontSize: '1.1rem', fontWeight: '800', marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                                <ClipboardList size={20} color="#10b981" /> Homework Scores
-                            </h3>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-                                {formData.homeworkScores.map((subj, idx) => {
                                     const isEditable = assignedSubjects.includes(subj.subject);
                                     return (
                                         <div key={idx} style={{ marginBottom: '1rem' }}>
@@ -513,14 +490,52 @@ const PerformanceView = ({ user, onBack }) => {
                                                 value={subj.score}
                                                 disabled={!isEditable}
                                                 onChange={(e) => {
+                                                    const newScores = [...formData.academicScores];
+                                                    newScores[idx].score = parseInt(e.target.value) || 0;
+                                                    setFormData({ ...formData, academicScores: newScores });
+                                                }}
+                                                className="custom-slider"
+                                                style={{
+                                                    '--slider-color': '#10b981',
+                                                    '--slider-value': `${subj.score}%`,
+                                                    opacity: isEditable ? 1 : 0.4,
+                                                    cursor: isEditable ? 'pointer' : 'not-allowed'
+                                                }}
+                                            />
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+
+                        {/* 2. Homework Scores (NEW) */}
+                        <div className="glass" style={{ padding: '1.5rem', borderRadius: '28px' }}>
+                            <h3 style={{ fontSize: '1.1rem', fontWeight: '800', marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                                <ClipboardList size={20} color="#f59e0b" /> Homework Scores
+                            </h3>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                                {formData.homeworkScores.map((subj, idx) => {
+                                    const isEditable = assignedSubjects.includes(subj.subject);
+                                    return (
+                                        <div key={idx} style={{ marginBottom: '1rem' }}>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem', fontSize: '0.9rem', fontWeight: '600' }}>
+                                                <span style={{ color: 'var(--text-main)' }}>{subj.subject}</span>
+                                                <span style={{ color: isEditable ? '#f59e0b' : 'var(--text-muted)' }}>{subj.score}%</span>
+                                            </div>
+                                            <input
+                                                type="range"
+                                                min="0" max="100"
+                                                value={subj.score}
+                                                disabled={!isEditable}
+                                                onChange={(e) => {
                                                     const newScores = [...formData.homeworkScores];
                                                     newScores[idx].score = parseInt(e.target.value) || 0;
                                                     setFormData({ ...formData, homeworkScores: newScores });
                                                 }}
+                                                className="custom-slider"
                                                 style={{
-                                                    width: '100%',
-                                                    accentColor: '#10b981',
-                                                    height: '6px',
+                                                    '--slider-color': '#f59e0b',
+                                                    '--slider-value': `${subj.score}%`,
                                                     opacity: isEditable ? 1 : 0.4,
                                                     cursor: isEditable ? 'pointer' : 'not-allowed'
                                                 }}
@@ -571,10 +586,11 @@ const PerformanceView = ({ user, onBack }) => {
                                     min="0" max="100"
                                     value={formData.attendance}
                                     onChange={(e) => setFormData({ ...formData, attendance: parseInt(e.target.value) || 0 })}
+                                    className="custom-slider"
                                     style={{
-                                        width: '100%',
-                                        accentColor: '#34d399',
-                                        height: '6px',
+                                        '--slider-color': '#34d399',
+                                        '--slider-track-color': '#ef4444',
+                                        '--slider-value': `${formData.attendance}%`,
                                         cursor: 'pointer'
                                     }}
                                 />

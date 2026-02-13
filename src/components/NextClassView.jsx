@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { db } from '../firebase';
 import { collection, query, onSnapshot, doc, updateDoc, writeBatch, orderBy, getDocs, where, limit } from 'firebase/firestore';
-import { ChevronLeft, Users, BookOpen, Save, Loader2, Search, Sliders, ChevronRight } from 'lucide-react';
+import { ChevronLeft, Users, BookOpen, Save, Loader2, Search, Sliders, ChevronRight, ClipboardList } from 'lucide-react';
 
 const NextClassView = ({ user, onBack }) => {
     // Navigation State
@@ -346,6 +346,39 @@ const NextClassView = ({ user, onBack }) => {
                         exit={{ opacity: 0, y: 20 }}
                         style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}
                     >
+                        {/* Summary Cards */}
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                            {/* Subject Score Card */}
+                            <div className="glass" style={{
+                                padding: '1.25rem', borderRadius: '20px', display: 'flex', flexDirection: 'column',
+                                alignItems: 'center', textAlign: 'center', background: '#3b82f6', color: 'white',
+                                boxShadow: '0 10px 20px -5px rgba(59, 130, 246, 0.4)'
+                            }}>
+                                <div style={{ marginBottom: '0.5rem', background: 'rgba(255,255,255,0.2)', padding: '8px', borderRadius: '12px' }}>
+                                    <BookOpen size={20} color="white" />
+                                </div>
+                                <h3 style={{ fontSize: '1.75rem', fontWeight: '800', marginBottom: '0.1rem' }}>
+                                    {Math.round(students.reduce((acc, student) => acc + getStudentScore(student, 'academic'), 0) / (students.length || 1))}%
+                                </h3>
+                                <p style={{ fontSize: '0.8rem', opacity: 0.9, fontWeight: '600' }}>Subject Score</p>
+                            </div>
+
+                            {/* Homework Score Card */}
+                            <div className="glass" style={{
+                                padding: '1.25rem', borderRadius: '20px', display: 'flex', flexDirection: 'column',
+                                alignItems: 'center', textAlign: 'center', background: '#eab308', color: 'white',
+                                boxShadow: '0 10px 20px -5px rgba(234, 179, 8, 0.4)'
+                            }}>
+                                <div style={{ marginBottom: '0.5rem', background: 'rgba(255,255,255,0.2)', padding: '8px', borderRadius: '12px' }}>
+                                    <ClipboardList size={20} color="white" />
+                                </div>
+                                <h3 style={{ fontSize: '1.75rem', fontWeight: '800', marginBottom: '0.1rem' }}>
+                                    {Math.round(students.reduce((acc, student) => acc + getStudentScore(student, 'homework'), 0) / (students.length || 1))}%
+                                </h3>
+                                <p style={{ fontSize: '0.8rem', opacity: 0.9, fontWeight: '600' }}>Homework Score</p>
+                            </div>
+                        </div>
+
                         {/* Search */}
                         <div className="glass" style={{ borderRadius: '12px', padding: '0.5rem 1rem', display: 'flex', alignItems: 'center' }}>
                             <Search size={16} color="var(--text-muted)" />
@@ -356,7 +389,7 @@ const NextClassView = ({ user, onBack }) => {
                                 onChange={(e) => setSearchTerm(e.target.value)}
                                 style={{
                                     background: 'transparent', border: 'none', outline: 'none',
-                                    color: 'white', marginLeft: '0.5rem', width: '100%'
+                                    color: 'var(--text-main)', marginLeft: '0.5rem', width: '100%'
                                 }}
                             />
                         </div>

@@ -33,13 +33,15 @@ import PerformanceView from '../components/PerformanceView';
 import NextClassView from '../components/NextClassView';
 import AttendanceReport from '../components/AttendanceReport';
 import BottomNav from '../components/BottomNav';
+import Notebook from '../components/Notebook';
 
 const Dashboard = ({ user }) => {
+    const [currentView, setCurrentView] = useState('main'); // 'main', 'attendance', 'feed'
+    console.log("Dashboard Render: currentView =", currentView, "user =", user?.uid);
     const navigate = useNavigate();
 
     const [isOnDuty, setIsOnDuty] = useState(false);
     const [activeTab, setActiveTab] = useState('home'); // 'home', 'notif', 'profile'
-    const [currentView, setCurrentView] = useState('main'); // 'main', 'attendance', 'feed'
     const [isSuspended, setIsSuspended] = useState(false);
     const [loading, setLoading] = useState(true);
     const [schoolInfo, setSchoolInfo] = useState({ name: '', logo: '' });
@@ -517,7 +519,7 @@ const Dashboard = ({ user }) => {
         { id: 'attendance', title: 'Attendance', icon: UserCheck, color: '#6366f1', description: 'Mark today\'s presence', action: () => setCurrentView('attendance') },
         { id: 'news-feed', title: 'News Feed', icon: FileText, color: '#10b981', description: 'School announcements', action: () => setCurrentView('feed') },
         { id: 'performance', title: 'Performance', icon: BarChart3, color: '#8b5cf6', description: 'Update student scores', action: () => setCurrentView('performance') },
-        { id: 'next-class', title: 'Next Class', icon: Clock, color: '#f43f5e', description: 'Class 10-A • 10:30 AM', action: () => setCurrentView('next-class') },
+        { id: 'notebook', title: 'Notebook', icon: BookOpen, color: '#f59e0b', description: 'My personal notes', action: () => setCurrentView('notebook') },
     ];
 
     const handleLogout = () => {
@@ -556,13 +558,19 @@ const Dashboard = ({ user }) => {
             setCurrentView('main');
             setActiveTab('home');
         } else if (tab === 'classes') {
-            setCurrentView('main');
-            setActiveTab('next');
+            setCurrentView('main'); // Old path, just in case
+        } else if (tab === 'next-class') {
+            console.log("Navigation: Switching to next-class");
+            setCurrentView('next-class');
+            setActiveTab('next-class');
         } else if (tab === 'performance') {
             setCurrentView('performance');
         } else if (tab === 'profile') {
             setCurrentView('main');
             setActiveTab('profile');
+        } else if (tab === 'notebook') {
+            console.log("Navigation: Switching to notebook");
+            setCurrentView('notebook');
         } else if (tab === 'new-task') {
             setCurrentView('feed');
         }
@@ -1206,10 +1214,21 @@ const Dashboard = ({ user }) => {
 
 
     if (currentView === 'next-class') {
+        console.log("Dashboard: Rendering NextClassView");
         return (
             <div className="app-container" style={{ padding: '1.5rem', paddingBottom: '120px' }}>
                 <NextClassView user={user} onBack={() => setCurrentView('main')} />
-                <BottomNav activeTab="next" setActiveTab={handleNavigation} />
+                <BottomNav activeTab="next-class" setActiveTab={handleNavigation} />
+            </div>
+        );
+    }
+
+    if (currentView === 'notebook') {
+        console.log("Dashboard: Rendering Notebook");
+        return (
+            <div className="app-container" style={{ padding: '1.5rem', paddingBottom: '120px' }}>
+                <Notebook user={user} onBack={() => setCurrentView('main')} />
+                <BottomNav activeTab="notebook" setActiveTab={handleNavigation} />
             </div>
         );
     }
@@ -1457,7 +1476,7 @@ const Dashboard = ({ user }) => {
                 </motion.main>
             </AnimatePresence>
 
-            <BottomNav activeTab={activeTab === 'home' || activeTab === 'next' || activeTab === 'notif' || activeTab === 'profile' ? activeTab : 'home'} setActiveTab={setActiveTab} />
+            <BottomNav activeTab={activeTab === 'home' || activeTab === 'next-class' || activeTab === 'notif' || activeTab === 'profile' || activeTab === 'notebook' || activeTab === 'performance' ? activeTab : 'home'} setActiveTab={handleNavigation} />
         </div>
     );
 };

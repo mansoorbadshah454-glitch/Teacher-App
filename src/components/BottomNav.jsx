@@ -99,12 +99,14 @@ const BottomNav = ({ activeTab, setActiveTab }) => {
                     className="glass"
                 >
                     <NavIcon icon={Home} label="Home" active={activeTab === 'home'} onClick={() => setActiveTab('home')} />
-                    <NavIcon icon={Clock} label="Classes" active={activeTab === 'classes'} onClick={() => setActiveTab('classes')} />
 
-                    {/* Central "New Task" Button */}
+                    {/* Changed from Classes to Next Class Shortcut */}
+                    <NavIcon icon={Clock} label="Next Class" active={activeTab === 'next-class'} onClick={() => setActiveTab('next-class')} />
+
+                    {/* Central "Notebook" Button */}
                     <div style={{ position: 'relative', marginTop: '-35px' }}>
                         <button
-                            onClick={() => setActiveTab('new-task')}
+                            onClick={() => setActiveTab('notebook')}
                             className="btn-press"
                             style={{
                                 width: '64px',
@@ -120,7 +122,7 @@ const BottomNav = ({ activeTab, setActiveTab }) => {
                                 cursor: 'pointer'
                             }}
                         >
-                            <PlusCircle size={32} />
+                            <FileText size={28} />
                         </button>
                     </div>
 

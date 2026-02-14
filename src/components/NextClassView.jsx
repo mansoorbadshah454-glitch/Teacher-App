@@ -5,6 +5,7 @@ import { collection, query, onSnapshot, doc, updateDoc, writeBatch, orderBy, get
 import { ChevronLeft, Users, BookOpen, Save, Loader2, Search, Sliders, ChevronRight, ClipboardList } from 'lucide-react';
 
 const NextClassView = ({ user, onBack }) => {
+    console.log("NextClassView Render: user =", user?.uid);
     // Navigation State
     const [viewState, setViewState] = useState('classes'); // 'classes', 'subjects', 'students'
 

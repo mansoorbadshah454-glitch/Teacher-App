@@ -26,7 +26,8 @@ import {
     Share2,
     Calendar,
     Sun,
-    Moon
+    Moon,
+    MessageCircle
 } from 'lucide-react';
 import AttendanceView from '../components/AttendanceView';
 import PerformanceView from '../components/PerformanceView';
@@ -34,6 +35,7 @@ import NextClassView from '../components/NextClassView';
 import AttendanceReport from '../components/AttendanceReport';
 import BottomNav from '../components/BottomNav';
 import Notebook from '../components/Notebook';
+import ContactParents from '../components/ContactParents';
 
 const Dashboard = ({ user }) => {
     const [currentView, setCurrentView] = useState('main'); // 'main', 'attendance', 'feed'
@@ -573,6 +575,8 @@ const Dashboard = ({ user }) => {
             setCurrentView('notebook');
         } else if (tab === 'new-task') {
             setCurrentView('feed');
+        } else if (tab === 'contact-parents') {
+            setCurrentView('contact-parents');
         }
     };
 
@@ -1233,6 +1237,15 @@ const Dashboard = ({ user }) => {
         );
     }
 
+    if (currentView === 'contact-parents') {
+        return (
+            <div className="app-container" style={{ padding: '0', paddingBottom: '120px' }}>
+                <ContactParents user={user} onBack={() => { setCurrentView('main'); setActiveTab('home'); }} />
+                <BottomNav activeTab="home" setActiveTab={handleNavigation} />
+            </div>
+        );
+    }
+
     return (
         <div className="app-container" style={{ padding: '1.5rem' }}>
             {/* Header */}
@@ -1343,6 +1356,49 @@ const Dashboard = ({ user }) => {
                                     </motion.div>
                                 ))}
                             </div>
+
+                            {/* Contact Parents Card - Full Width */}
+                            <motion.div
+                                initial={{ opacity: 0, y: 20 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ delay: 0.4 }}
+                                whileTap={{ scale: 0.98 }}
+                                onClick={() => setCurrentView('contact-parents')}
+                                className="glass"
+                                style={{
+                                    padding: '1.25rem',
+                                    borderRadius: '24px',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '1rem',
+                                    marginBottom: '2rem',
+                                    cursor: 'pointer',
+                                    position: 'relative',
+                                    overflow: 'hidden',
+                                    boxShadow: 'var(--card-shadow)',
+                                    background: 'linear-gradient(135deg, rgba(236, 72, 153, 0.1) 0%, rgba(219, 39, 119, 0.1) 100%)',
+                                    border: '1px solid rgba(236, 72, 153, 0.2)'
+                                }}
+                            >
+                                <div style={{
+                                    width: '48px',
+                                    height: '48px',
+                                    borderRadius: '14px',
+                                    background: 'rgba(236, 72, 153, 0.2)',
+                                    color: '#ec4899',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    flexShrink: 0
+                                }}>
+                                    <MessageCircle size={24} />
+                                </div>
+                                <div style={{ flex: 1 }}>
+                                    <h3 style={{ fontSize: '1.05rem', fontWeight: '700', marginBottom: '0.25rem' }}>Contact Parents</h3>
+                                    <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', lineHeight: '1.2' }}>Message student parents directly</p>
+                                </div>
+                                <ChevronRight color="#ec4899" style={{ opacity: 0.6 }} size={20} />
+                            </motion.div>
 
 
                         </>

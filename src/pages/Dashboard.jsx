@@ -19,7 +19,7 @@ import {
     LogOut,
     Loader2,
     ShieldAlert,
-    MoreHorizontal,
+    MoreVertical,
     Shield,
     Users,
     ThumbsUp,
@@ -53,6 +53,8 @@ const Dashboard = ({ user }) => {
     const [mediaType, setMediaType] = useState('image'); // 'image' or 'video'
     const [mediaPreview, setMediaPreview] = useState(null);
     const [posting, setPosting] = useState(false);
+    const [menuOpenId, setMenuOpenId] = useState(null);
+    const [editingPostId, setEditingPostId] = useState(null);
 
     // Audience State
     const [audience, setAudience] = useState('all'); // 'all' or 'class'
@@ -302,15 +304,29 @@ const Dashboard = ({ user }) => {
     };
 
     const handlePost = async () => {
-        if (!postText.trim() && !mediaFile) return;
+        if (!postText.trim() && !mediaFile && !editingPostId) return;
         if (audience === 'class' && !selectedClass) {
             alert("Please select a class.");
+            return;
+        }
+        if (!user?.schoolId) {
+            alert("School ID missing. Please reload.");
             return;
         }
 
         setPosting(true);
         try {
             let mediaUrl = '';
+            // If editing and no new file, keep existing. If new file, upload.
+            // For simplicity in this flow, if mediaFile is null but we are editing and have mediaPreview, 
+            // we assume we keep the old one (logic below needs to handle this).
+
+            // Actually, simplified:
+            // If mediaFile (new file), upload it.
+            // If editing, and no new file, we retain what's in the doc (handled by not overwriting if field missing in update, 
+            // BUT we need to know the old URL if we want to be explicit. 
+            // Easier: Just handle upload if mediaFile exists. 
+
             let storagePath = `schools/${user.schoolId}/posts/${Date.now()}_${mediaFile ? mediaFile.name : 'post'}`;
 
             if (mediaFile) {
@@ -323,23 +339,58 @@ const Dashboard = ({ user }) => {
                 ? classes.find(c => c.id === selectedClass)?.name || ''
                 : '';
 
-            await addDoc(collection(db, `schools/${user.schoolId}/posts`), {
-                text: postText,
-                mediaUrl: mediaUrl,
-                mediaType: mediaFile ? mediaType : 'none',
-                imageUrl: mediaType === 'image' ? mediaUrl : '', // Legacy
-                timestamp: serverTimestamp(),
-                authorName: user.name || 'Teacher',
-                authorImage: schoolInfo.logo || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.email}`,
-                role: 'Teacher',
-                teacherId: user.uid,
-                audience: audience,
-                targetClassId: audience === 'class' ? selectedClass : null,
-                targetClassName: targetClassName,
-                backgroundStyle: backgroundStyle || 'default',
-                likes: [],
-                shares: 0
-            });
+            if (editingPostId) {
+                // Update existing post
+                const postRef = doc(db, `schools/${user.schoolId}/posts`, editingPostId);
+                const updateData = {
+                    text: postText,
+                    audience: audience,
+                    targetClassId: audience === 'class' ? (selectedClass || null) : null,
+                    targetClassName: targetClassName,
+                    backgroundStyle: backgroundStyle || 'default',
+                    updatedAt: serverTimestamp(),
+                    // teacherId: user.uid, // Removed to avoid "immutable field" rule violation
+                    // Only update media fields if new media was uploaded
+                    ...(mediaFile && {
+                        mediaUrl: mediaUrl,
+                        mediaType: mediaType,
+                        imageUrl: mediaType === 'image' ? mediaUrl : ''
+                    })
+                };
+
+                // If user cleared preview (e.g. removed image), we should probably handle that too, 
+                // but for now let's assume they either replace or keep. 
+                // To support removing, we'd need to check if mediaPreview is null.
+                if (!mediaPreview && !mediaFile) {
+                    updateData.mediaUrl = '';
+                    updateData.imageUrl = '';
+                    updateData.mediaType = 'none';
+                }
+
+                await updateDoc(postRef, updateData);
+                alert("Post updated successfully!");
+                setEditingPostId(null);
+            } else {
+                // Create new post
+                await addDoc(collection(db, `schools/${user.schoolId}/posts`), {
+                    text: postText,
+                    mediaUrl: mediaUrl,
+                    mediaType: mediaFile ? mediaType : 'none',
+                    imageUrl: mediaType === 'image' ? mediaUrl : '', // Legacy
+                    timestamp: serverTimestamp(),
+                    authorName: user.name || 'Teacher',
+                    authorImage: schoolInfo.logo || `https://api.dicebear.com/7.x/avataaars/svg?seed=${user.email}`,
+                    role: 'Teacher',
+                    teacherId: user.uid,
+                    audience: audience,
+                    targetClassId: audience === 'class' ? selectedClass : null,
+                    targetClassName: targetClassName,
+                    backgroundStyle: backgroundStyle || 'default',
+                    likes: [],
+                    shares: 0
+                });
+                alert("Posted successfully!");
+            }
 
             setPostText('');
             setMediaFile(null);
@@ -348,10 +399,10 @@ const Dashboard = ({ user }) => {
             setAudience('all');
             setSelectedClass('');
             setBackgroundStyle('default');
-            alert("Posted successfully!");
+            setEditingPostId(null);
         } catch (error) {
-            console.error("Error creating post:", error);
-            alert("Failed to post: " + error.message);
+            console.error("Error saving post:", error);
+            alert("Failed to save: " + error.message);
         } finally {
             setPosting(false);
         }
@@ -392,6 +443,61 @@ const Dashboard = ({ user }) => {
         } catch (error) {
             console.error("Error sharing post:", error);
         }
+    };
+
+    const handleDelete = async (postId, imageUrl) => {
+        if (!user || !user.schoolId) return;
+        if (window.confirm("Delete this post?")) {
+            try {
+                await deleteDoc(doc(db, `schools/${user.schoolId}/posts`, postId));
+                if (imageUrl) {
+                    try {
+                        const imageRef = ref(storage, imageUrl);
+                        // Check if it's a firebase storage url before deleting
+                        if (imageUrl.includes('firebase')) {
+                            // This might need more robust checking but try/catch handles it
+                            // await deleteObject(imageRef); 
+                            // Skip actual file delete for now to avoid permission errors if shared
+                        }
+                    } catch (e) {
+                        console.log("Image delete skipped/failed", e);
+                    }
+                }
+                setMenuOpenId(null);
+            } catch (error) {
+                console.error("Error deleting post:", error);
+                alert("Failed to delete post.");
+            }
+        }
+    };
+
+    const handleCancelEdit = () => {
+        setEditingPostId(null);
+        setPostText('');
+        setMediaFile(null);
+        setMediaPreview(null);
+        setMediaType('image');
+        setAudience('all');
+        setSelectedClass('');
+        setBackgroundStyle('default');
+    };
+
+    const handleEdit = (post) => {
+        setEditingPostId(post.id);
+        setPostText(post.text || '');
+        setAudience(post.audience || 'all');
+        setSelectedClass(post.targetClassId || '');
+        if (post.imageUrl || post.mediaUrl) {
+            setMediaPreview(post.imageUrl || post.mediaUrl);
+            setMediaType(post.mediaType || 'image');
+            // We don't set mediaFile because we can't create a File object from a URL programmatically
+            // The handlePost logic needs to handle "existing media" vs "new media"
+        } else {
+            setMediaPreview(null);
+            setMediaType('image');
+        }
+        setBackgroundStyle(post.backgroundStyle || 'default');
+        setMenuOpenId(null);
     };
 
     const stats = [
@@ -525,187 +631,221 @@ const Dashboard = ({ user }) => {
                     </div>
                 </div>
 
-                <h2 style={{ fontSize: '1.5rem', fontWeight: 'bold', marginBottom: '1.5rem', color: 'var(--text-main)' }}>News Feed</h2>
-
-                {/* Create Post Section */}
-                <div className="glass" style={{ padding: '1.25rem', borderRadius: '20px', marginBottom: '2rem' }}>
-
-                    {/* Background Options */}
-                    {!mediaFile && (
-                        <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem', overflowX: 'auto', paddingBottom: '0.5rem' }}>
-                            {[
-                                { id: 'default', bg: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.1)' },
-                                { id: 'gradient-blue', bg: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)', border: 'none' },
-                                { id: 'gradient-pink', bg: 'linear-gradient(135deg, #f43f5e 0%, #fb7185 100%)', border: 'none' },
-                                { id: 'gradient-green', bg: 'linear-gradient(135deg, #10b981 0%, #34d399 100%)', border: 'none' },
-                                { id: 'gradient-orange', bg: 'linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%)', border: 'none' },
-                            ].map((style) => (
-                                <button
-                                    key={style.id}
-                                    onClick={() => setBackgroundStyle(style.id)} // Need to add this state
-                                    style={{
-                                        width: '32px',
-                                        height: '32px',
-                                        borderRadius: '50%',
-                                        background: style.bg,
-                                        border: backgroundStyle === style.id ? '2px solid white' : style.border,
-                                        cursor: 'pointer',
-                                        flexShrink: 0,
-                                        boxShadow: backgroundStyle === style.id ? '0 0 0 2px var(--primary)' : 'none',
-                                        transition: 'all 0.2s ease'
-                                    }}
-                                />
-                            ))}
-                        </div>
-                    )}
-
-                    <textarea
-                        value={postText}
-                        onChange={(e) => setPostText(e.target.value)}
-                        placeholder="Share an update with the school..."
-                        style={{
-                            width: '100%',
-                            background: backgroundStyle && backgroundStyle !== 'default' && !mediaFile
-                                ? getBackgroundCss(backgroundStyle)
-                                : 'rgba(0,0,0,0.2)',
-                            border: 'none',
-                            borderRadius: '12px',
-                            padding: '1rem',
-                            color: backgroundStyle && backgroundStyle !== 'default' && !mediaFile ? 'white' : 'var(--text-main)',
-                            marginBottom: '1rem',
-                            resize: 'none',
-                            outline: 'none',
-                            fontFamily: 'inherit',
-                            minHeight: backgroundStyle && backgroundStyle !== 'default' && !mediaFile ? '150px' : '100px',
-                            fontSize: backgroundStyle && backgroundStyle !== 'default' && !mediaFile ? '1.1rem' : '1rem',
-                            fontWeight: backgroundStyle && backgroundStyle !== 'default' && !mediaFile ? '600' : '400',
-                            textAlign: backgroundStyle && backgroundStyle !== 'default' && !mediaFile ? 'center' : 'left',
-                            display: 'flex',
-                            flexDirection: 'column',
-                            justifyContent: 'center',
-                            transition: 'all 0.3s ease',
-                            '::placeholder': { color: 'rgba(255,255,255,0.6)' }
-                        }}
-                    />
-
-                    {mediaPreview && (
-                        <div style={{ marginBottom: '1rem', position: 'relative' }}>
-                            {mediaType === 'video' ? (
-                                <video src={mediaPreview} controls style={{ maxWidth: '100%', maxHeight: '200px', borderRadius: '12px', background: 'black' }} />
-                            ) : (
-                                <img src={mediaPreview} style={{ maxWidth: '100%', maxHeight: '200px', borderRadius: '12px', objectFit: 'cover' }} />
-                            )}
-                            <button
-                                onClick={() => { setMediaFile(null); setMediaPreview(null); }}
-                                style={{ position: 'absolute', top: 5, right: 5, background: 'rgba(0,0,0,0.5)', borderRadius: '50%', border: 'none', color: 'white', width: 28, height: 28, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
-                            >
-                                ×
-                            </button>
-                        </div>
-                    )}
-
-                    {/* Unified Target Selection */}
-                    <div style={{ marginBottom: '1.25rem' }}>
-                        <div style={{
-                            background: 'rgba(255,255,255,0.05)',
-                            borderRadius: '12px',
-                            padding: '0.5rem',
-                            display: 'flex',
-                            alignItems: 'center',
-                            border: '1px solid var(--glass-border)'
-                        }}>
-                            <div style={{
-                                padding: '0.5rem',
-                                color: 'var(--text-muted)',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '0.5rem',
-                                fontSize: '0.9rem',
-                                fontWeight: '600'
-                            }}>
-                                <Users size={16} />
-                                <span>Post to:</span>
-                            </div>
-
-                            <div style={{ flex: 1, position: 'relative' }}>
-                                <select
-                                    value={audience === 'all' ? 'all' : selectedClass}
-                                    onChange={(e) => {
-                                        if (e.target.value === 'all') {
-                                            setAudience('all');
-                                            setSelectedClass('');
-                                        } else {
-                                            setAudience('class');
-                                            setSelectedClass(e.target.value);
-                                        }
-                                    }}
-                                    style={{
-                                        width: '100%',
-                                        background: 'transparent',
-                                        border: 'none',
-                                        color: 'var(--text-main)',
-                                        fontSize: '0.9rem',
-                                        fontWeight: '500',
-                                        padding: '0.5rem',
-                                        outline: 'none',
-                                        cursor: 'pointer',
-                                        appearance: 'none' // Remove default arrow to style commonly? Or keep for native feel
-                                    }}
-                                >
-                                    <option value="all" style={{ color: 'black' }}>Everyone (All Classes)</option>
-                                    <optgroup label="Specific Class" style={{ color: 'black' }}>
-                                        {classes.map(cls => (
-                                            <option key={cls.id} value={cls.id} style={{ color: 'black' }}>{cls.name}</option>
-                                        ))}
-                                    </optgroup>
-                                </select>
-                                <ChevronRight
-                                    size={14}
-                                    style={{
-                                        position: 'absolute',
-                                        right: '10px',
-                                        top: '50%',
-                                        transform: 'translateY(-50%) rotate(90deg)',
-                                        pointerEvents: 'none',
-                                        color: 'var(--text-muted)'
-                                    }}
-                                />
-                            </div>
-                        </div>
+                <div style={{
+                    marginBottom: '1.5rem',
+                    background: 'var(--primary)',
+                    color: 'white',
+                    padding: '1.5rem',
+                    borderRadius: '16px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '1rem',
+                    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+                }}>
+                    <div style={{
+                        width: '50px',
+                        height: '50px',
+                        borderRadius: '50%',
+                        background: 'white',
+                        padding: '2px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: 0
+                    }}>
+                        {schoolInfo.logo ? (
+                            <img src={schoolInfo.logo} alt="School Logo" style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
+                        ) : (
+                            <Shield size={28} color="var(--primary)" />
+                        )}
                     </div>
-
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <div style={{ display: 'flex', gap: '1rem' }}>
-                            <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: '#10b981', cursor: 'pointer', fontSize: '0.9rem', padding: '0.4rem 0.8rem', borderRadius: '8px', background: 'rgba(16, 185, 129, 0.1)' }}>
-                                <FileText size={18} />
-                                <span style={{ fontSize: '0.8rem', fontWeight: '600' }}>Photo</span>
-                                <input type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => handleFileChange(e, 'image')} />
-                            </label>
-                            <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: '#f43f5e', cursor: 'pointer', fontSize: '0.9rem', padding: '0.4rem 0.8rem', borderRadius: '8px', background: 'rgba(244, 63, 94, 0.1)' }}>
-                                <FileText size={18} />
-                                <span style={{ fontSize: '0.8rem', fontWeight: '600' }}>Video</span>
-                                <input type="file" accept="video/*" style={{ display: 'none' }} onChange={(e) => handleFileChange(e, 'video')} />
-                            </label>
-                        </div>
-                        <button
-                            onClick={handlePost}
-                            disabled={!postText && !mediaFile || posting}
-                            className="btn-press"
-                            style={{
-                                background: 'var(--primary)',
-                                color: 'white',
-                                border: 'none',
-                                padding: '0.6rem 1.5rem',
-                                borderRadius: '10px',
-                                fontWeight: 'bold',
-                                opacity: (!postText && !mediaFile || posting) ? 0.5 : 1,
-                                boxShadow: '0 4px 12px rgba(99, 102, 241, 0.3)'
-                            }}
-                        >
-                            {posting ? <Loader2 className="animate-spin" size={20} /> : <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}><span>Post</span><Send size={16} /></div>}
-                        </button>
+                    <div>
+                        <h2 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 'bold' }}>{schoolInfo.name || 'School Name'}</h2>
+                        <p style={{ margin: 0, opacity: 0.9, fontSize: '0.9rem' }}>News Feed</p>
                     </div>
                 </div>
+
+                {/* Create Post Section - Hidden when editing */}
+                {!editingPostId && (
+                    <div className="glass" style={{ padding: '1.25rem', borderRadius: '20px', marginBottom: '2rem' }}>
+
+                        {/* Background Options */}
+                        {!mediaFile && (
+                            <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem', overflowX: 'auto', paddingBottom: '0.5rem' }}>
+                                {[
+                                    { id: 'default', bg: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.1)' },
+                                    { id: 'gradient-blue', bg: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)', border: 'none' },
+                                    { id: 'gradient-pink', bg: 'linear-gradient(135deg, #f43f5e 0%, #fb7185 100%)', border: 'none' },
+                                    { id: 'gradient-green', bg: 'linear-gradient(135deg, #10b981 0%, #34d399 100%)', border: 'none' },
+                                    { id: 'gradient-orange', bg: 'linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%)', border: 'none' },
+                                ].map((style) => (
+                                    <button
+                                        key={style.id}
+                                        onClick={() => setBackgroundStyle(style.id)} // Need to add this state
+                                        style={{
+                                            width: '32px',
+                                            height: '32px',
+                                            borderRadius: '50%',
+                                            background: style.bg,
+                                            border: backgroundStyle === style.id ? '2px solid white' : style.border,
+                                            cursor: 'pointer',
+                                            flexShrink: 0,
+                                            boxShadow: backgroundStyle === style.id ? '0 0 0 2px var(--primary)' : 'none',
+                                            transition: 'all 0.2s ease'
+                                        }}
+                                    />
+                                ))}
+                            </div>
+                        )}
+
+                        <textarea
+                            value={postText}
+                            onChange={(e) => setPostText(e.target.value)}
+                            placeholder="Share an update with the school..."
+                            style={{
+                                width: '100%',
+                                background: backgroundStyle && backgroundStyle !== 'default' && !mediaFile
+                                    ? getBackgroundCss(backgroundStyle)
+                                    : 'rgba(0,0,0,0.2)',
+                                border: 'none',
+                                borderRadius: '12px',
+                                padding: '1rem',
+                                color: backgroundStyle && backgroundStyle !== 'default' && !mediaFile ? 'white' : 'var(--text-main)',
+                                marginBottom: '1rem',
+                                resize: 'none',
+                                outline: 'none',
+                                fontFamily: 'inherit',
+                                minHeight: backgroundStyle && backgroundStyle !== 'default' && !mediaFile ? '150px' : '100px',
+                                fontSize: backgroundStyle && backgroundStyle !== 'default' && !mediaFile ? '1.1rem' : '1rem',
+                                fontWeight: backgroundStyle && backgroundStyle !== 'default' && !mediaFile ? '600' : '400',
+                                textAlign: backgroundStyle && backgroundStyle !== 'default' && !mediaFile ? 'center' : 'left',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                justifyContent: 'center',
+                                transition: 'all 0.3s ease',
+                                '::placeholder': { color: 'rgba(255,255,255,0.6)' }
+                            }}
+                        />
+
+                        {mediaPreview && (
+                            <div style={{ marginBottom: '1rem', position: 'relative' }}>
+                                {mediaType === 'video' ? (
+                                    <video src={mediaPreview} controls style={{ maxWidth: '100%', maxHeight: '200px', borderRadius: '12px', background: 'black' }} />
+                                ) : (
+                                    <img src={mediaPreview} style={{ maxWidth: '100%', maxHeight: '200px', borderRadius: '12px', objectFit: 'cover' }} />
+                                )}
+                                <button
+                                    onClick={() => { setMediaFile(null); setMediaPreview(null); }}
+                                    style={{ position: 'absolute', top: 5, right: 5, background: 'rgba(0,0,0,0.5)', borderRadius: '50%', border: 'none', color: 'white', width: 28, height: 28, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                                >
+                                    ×
+                                </button>
+                            </div>
+                        )}
+
+                        {/* Unified Target Selection */}
+                        <div style={{ marginBottom: '1.25rem' }}>
+                            <div style={{
+                                background: 'rgba(255,255,255,0.05)',
+                                borderRadius: '12px',
+                                padding: '0.5rem',
+                                display: 'flex',
+                                alignItems: 'center',
+                                border: '1px solid var(--glass-border)'
+                            }}>
+                                <div style={{
+                                    padding: '0.5rem',
+                                    color: 'var(--text-muted)',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '0.5rem',
+                                    fontSize: '0.9rem',
+                                    fontWeight: '600'
+                                }}>
+                                    <Users size={16} />
+                                    <span>Post to:</span>
+                                </div>
+
+                                <div style={{ flex: 1, position: 'relative' }}>
+                                    <select
+                                        value={audience === 'all' ? 'all' : selectedClass}
+                                        onChange={(e) => {
+                                            if (e.target.value === 'all') {
+                                                setAudience('all');
+                                                setSelectedClass('');
+                                            } else {
+                                                setAudience('class');
+                                                setSelectedClass(e.target.value);
+                                            }
+                                        }}
+                                        style={{
+                                            width: '100%',
+                                            background: 'transparent',
+                                            border: 'none',
+                                            color: 'var(--text-main)',
+                                            fontSize: '0.9rem',
+                                            fontWeight: '500',
+                                            padding: '0.5rem',
+                                            outline: 'none',
+                                            cursor: 'pointer',
+                                            appearance: 'none' // Remove default arrow to style commonly? Or keep for native feel
+                                        }}
+                                    >
+                                        <option value="all" style={{ color: 'black' }}>Everyone (All Classes)</option>
+                                        <optgroup label="Specific Class" style={{ color: 'black' }}>
+                                            {classes.map(cls => (
+                                                <option key={cls.id} value={cls.id} style={{ color: 'black' }}>{cls.name}</option>
+                                            ))}
+                                        </optgroup>
+                                    </select>
+                                    <ChevronRight
+                                        size={14}
+                                        style={{
+                                            position: 'absolute',
+                                            right: '10px',
+                                            top: '50%',
+                                            transform: 'translateY(-50%) rotate(90deg)',
+                                            pointerEvents: 'none',
+                                            color: 'var(--text-muted)'
+                                        }}
+                                    />
+                                </div>
+                            </div>
+                        </div>
+
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div style={{ display: 'flex', gap: '1rem' }}>
+                                <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: '#10b981', cursor: 'pointer', fontSize: '0.9rem', padding: '0.4rem 0.8rem', borderRadius: '8px', background: 'rgba(16, 185, 129, 0.1)' }}>
+                                    <FileText size={18} />
+                                    <span style={{ fontSize: '0.8rem', fontWeight: '600' }}>Photo</span>
+                                    <input type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => handleFileChange(e, 'image')} />
+                                </label>
+                                <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: '#f43f5e', cursor: 'pointer', fontSize: '0.9rem', padding: '0.4rem 0.8rem', borderRadius: '8px', background: 'rgba(244, 63, 94, 0.1)' }}>
+                                    <FileText size={18} />
+                                    <span style={{ fontSize: '0.8rem', fontWeight: '600' }}>Video</span>
+                                    <input type="file" accept="video/*" style={{ display: 'none' }} onChange={(e) => handleFileChange(e, 'video')} />
+                                </label>
+                            </div>
+                            <button
+                                onClick={handlePost}
+                                disabled={(!postText && !mediaFile && !mediaPreview) || posting}
+                                className="btn-press"
+                                style={{
+                                    background: 'var(--primary)',
+                                    color: 'white',
+                                    border: 'none',
+                                    padding: '0.6rem 1.5rem',
+                                    borderRadius: '10px',
+                                    fontWeight: 'bold',
+                                    opacity: ((!postText && !mediaFile && !mediaPreview) || posting) ? 0.5 : 1,
+                                    boxShadow: '0 4px 12px rgba(99, 102, 241, 0.3)'
+                                }}
+                            >
+                                {posting ? <Loader2 className="animate-spin" size={20} /> : <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}><span>{editingPostId ? 'Update' : 'Post'}</span><Send size={16} /></div>}
+                            </button>
+                        </div>
+                    </div>
+                )}
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', paddingBottom: '100px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -724,126 +864,333 @@ const Dashboard = ({ user }) => {
 
                     {posts.map(post => (
                         <div key={post.id} className="glass" style={{ padding: '0', overflow: 'hidden', borderRadius: '20px' }}>
-                            <div style={{ padding: '1rem', display: 'flex', gap: '1rem', alignItems: 'center' }}>
-                                <div style={{ width: '45px', height: '45px', borderRadius: '14px', background: 'rgba(255,255,255,0.1)', overflow: 'hidden' }}>
-                                    {post.authorImage ? <img src={post.authorImage} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <Shield size={24} style={{ margin: '10px' }} />}
-                                </div>
-                                <div>
-                                    <h3 style={{ fontSize: '1rem', fontWeight: 'bold', color: 'var(--text-main)' }}>{post.authorName || 'Principal'}</h3>
+                            {editingPostId === post.id ? (
+                                <div style={{ padding: '1.25rem' }}>
+                                    <h3 style={{ marginBottom: '1rem', fontSize: '1.1rem', fontWeight: 'bold' }}>Edit Post</h3>
 
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                                        {post.role === 'Teacher' && (
-                                            <>
-                                                <span style={{
-                                                    background: 'rgba(99, 102, 241, 0.15)',
-                                                    color: 'var(--primary)',
-                                                    padding: '2px 8px',
-                                                    borderRadius: '6px',
-                                                    fontWeight: '700',
-                                                    fontSize: '0.7rem'
-                                                }}>
-                                                    Teacher
-                                                </span>
-                                                <span style={{ opacity: 0.5 }}>•</span>
-                                            </>
-                                        )}
-                                        <span>{post.timestamp ? new Date(post.timestamp.toDate()).toLocaleDateString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Just now'}</span>
-                                        <span style={{ opacity: 0.5 }}>•</span>
+                                    {!mediaFile && (
+                                        <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem', overflowX: 'auto', paddingBottom: '0.5rem' }}>
+                                            {[
+                                                { id: 'default', bg: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.1)' },
+                                                { id: 'gradient-blue', bg: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)', border: 'none' },
+                                                { id: 'gradient-pink', bg: 'linear-gradient(135deg, #f43f5e 0%, #fb7185 100%)', border: 'none' },
+                                                { id: 'gradient-green', bg: 'linear-gradient(135deg, #10b981 0%, #34d399 100%)', border: 'none' },
+                                                { id: 'gradient-orange', bg: 'linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%)', border: 'none' },
+                                            ].map((style) => (
+                                                <button
+                                                    key={style.id}
+                                                    onClick={() => setBackgroundStyle(style.id)}
+                                                    style={{
+                                                        width: '32px',
+                                                        height: '32px',
+                                                        borderRadius: '50%',
+                                                        background: style.bg,
+                                                        border: backgroundStyle === style.id ? '2px solid white' : style.border,
+                                                        cursor: 'pointer',
+                                                        flexShrink: 0,
+                                                        boxShadow: backgroundStyle === style.id ? '0 0 0 2px var(--primary)' : 'none',
+                                                        transition: 'all 0.2s ease'
+                                                    }}
+                                                />
+                                            ))}
+                                        </div>
+                                    )}
 
-                                        <div style={{
+                                    <textarea
+                                        value={postText}
+                                        onChange={(e) => setPostText(e.target.value)}
+                                        placeholder="Edit your post..."
+                                        style={{
+                                            width: '100%',
+                                            background: backgroundStyle && backgroundStyle !== 'default' && !mediaFile
+                                                ? getBackgroundCss(backgroundStyle)
+                                                : 'rgba(0,0,0,0.2)',
+                                            border: 'none',
+                                            borderRadius: '12px',
+                                            padding: '1rem',
+                                            color: backgroundStyle && backgroundStyle !== 'default' && !mediaFile ? 'white' : 'var(--text-main)',
+                                            marginBottom: '1rem',
+                                            resize: 'none',
+                                            outline: 'none',
+                                            fontFamily: 'inherit',
+                                            minHeight: '150px',
+                                            fontSize: backgroundStyle && backgroundStyle !== 'default' && !mediaFile ? '1.1rem' : '1rem',
+                                            fontWeight: backgroundStyle && backgroundStyle !== 'default' && !mediaFile ? '600' : '400',
+                                            textAlign: backgroundStyle && backgroundStyle !== 'default' && !mediaFile ? 'center' : 'left',
                                             display: 'flex',
-                                            alignItems: 'center',
-                                            gap: '0.3rem',
-                                            background: post.audience === 'class' ? 'rgba(99, 102, 241, 0.1)' : 'rgba(16, 185, 129, 0.1)',
-                                            padding: '2px 8px',
-                                            borderRadius: '6px',
-                                            color: post.audience === 'class' ? 'var(--primary)' : '#10b981',
-                                            fontWeight: '600'
-                                        }}>
-                                            <Users size={10} />
-                                            <span>{post.audience === 'class' ? (post.targetClassName || 'Class') : 'Everyone'}</span>
+                                            flexDirection: 'column',
+                                            justifyContent: 'center',
+                                        }}
+                                    />
+
+                                    {mediaPreview && (
+                                        <div style={{ marginBottom: '1rem', position: 'relative' }}>
+                                            {mediaType === 'video' ? (
+                                                <video src={mediaPreview} controls style={{ maxWidth: '100%', maxHeight: '200px', borderRadius: '12px', background: 'black' }} />
+                                            ) : (
+                                                <img src={mediaPreview} style={{ maxWidth: '100%', maxHeight: '200px', borderRadius: '12px', objectFit: 'cover' }} />
+                                            )}
+                                            <button
+                                                onClick={() => { setMediaFile(null); setMediaPreview(null); }}
+                                                style={{ position: 'absolute', top: 5, right: 5, background: 'rgba(0,0,0,0.5)', borderRadius: '50%', border: 'none', color: 'white', width: 28, height: 28, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                                            >
+                                                ×
+                                            </button>
+                                        </div>
+                                    )}
+
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <div style={{ display: 'flex', gap: '1rem' }}>
+                                            <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: '#10b981', cursor: 'pointer', fontSize: '0.9rem', padding: '0.4rem 0.8rem', borderRadius: '8px', background: 'rgba(16, 185, 129, 0.1)' }}>
+                                                <FileText size={18} /> <span style={{ fontSize: '0.8rem', fontWeight: '600' }}>Photo</span>
+                                                <input type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => handleFileChange(e, 'image')} />
+                                            </label>
+                                            <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: '#f43f5e', cursor: 'pointer', fontSize: '0.9rem', padding: '0.4rem 0.8rem', borderRadius: '8px', background: 'rgba(244, 63, 94, 0.1)' }}>
+                                                <FileText size={18} /> <span style={{ fontSize: '0.8rem', fontWeight: '600' }}>Video</span>
+                                                <input type="file" accept="video/*" style={{ display: 'none' }} onChange={(e) => handleFileChange(e, 'video')} />
+                                            </label>
+                                        </div>
+                                        <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                            <button
+                                                onClick={handleCancelEdit}
+                                                disabled={posting}
+                                                style={{
+                                                    background: 'transparent',
+                                                    border: '1px solid var(--text-muted)',
+                                                    padding: '0.6rem 1rem',
+                                                    borderRadius: '10px',
+                                                    color: 'var(--text-muted)',
+                                                    cursor: 'pointer',
+                                                    fontWeight: '600',
+                                                    fontSize: '0.9rem'
+                                                }}
+                                            >
+                                                Cancel
+                                            </button>
+                                            <button
+                                                onClick={handlePost}
+                                                disabled={(!postText && !mediaFile && !mediaPreview) || posting}
+                                                className="btn-press"
+                                                style={{
+                                                    background: 'var(--primary)',
+                                                    color: 'white',
+                                                    border: 'none',
+                                                    padding: '0.6rem 1.5rem',
+                                                    borderRadius: '10px',
+                                                    fontWeight: 'bold',
+                                                    opacity: ((!postText && !mediaFile && !mediaPreview) || posting) ? 0.5 : 1,
+                                                    boxShadow: '0 4px 12px rgba(99, 102, 241, 0.3)'
+                                                }}
+                                            >
+                                                {posting ? <Loader2 className="animate-spin" size={20} /> : <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}><span>Save</span><Send size={16} /></div>}
+                                            </button>
                                         </div>
                                     </div>
                                 </div>
-                            </div>
-
-                            {/* Post Content */}
-                            {post.backgroundStyle && post.backgroundStyle !== 'default' && !post.mediaUrl && !post.imageUrl ? (
-                                // Styled Text Post
-                                <div style={{
-                                    background: getBackgroundCss(post.backgroundStyle),
-                                    padding: '2.5rem 1.5rem',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center',
-                                    textAlign: 'center',
-                                    minHeight: '200px'
-                                }}>
-                                    <p style={{
-                                        color: 'white',
-                                        fontSize: '1.25rem',
-                                        fontWeight: '600',
-                                        whiteSpace: 'pre-wrap',
-                                        lineHeight: '1.6',
-                                        textShadow: '0 2px 4px rgba(0,0,0,0.1)'
-                                    }}>
-                                        {post.text}
-                                    </p>
-                                </div>
                             ) : (
-                                // Standard Post
                                 <>
-                                    <div style={{ padding: '0 1rem 1rem' }}>
-                                        <p style={{ whiteSpace: 'pre-wrap', lineHeight: '1.6', color: 'var(--text-main)', fontSize: '0.95rem' }}>{post.text}</p>
+                                    <div style={{ padding: '1rem', display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                                        <div style={{ width: '45px', height: '45px', borderRadius: '14px', background: 'rgba(255,255,255,0.1)', overflow: 'hidden' }}>
+                                            {post.authorImage ? <img src={post.authorImage} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <Shield size={24} style={{ margin: '10px' }} />}
+                                        </div>
+                                        <div>
+                                            <h3 style={{ fontSize: '1rem', fontWeight: 'bold', color: 'var(--text-main)' }}>{post.authorName || 'Principal'}</h3>
+
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                                                {post.role === 'Teacher' && (
+                                                    <>
+                                                        <span style={{
+                                                            background: 'rgba(99, 102, 241, 0.15)',
+                                                            color: 'var(--primary)',
+                                                            padding: '2px 8px',
+                                                            borderRadius: '6px',
+                                                            fontWeight: '700',
+                                                            fontSize: '0.7rem'
+                                                        }}>
+                                                            Teacher
+                                                        </span>
+                                                        <span style={{ opacity: 0.5 }}>•</span>
+                                                    </>
+                                                )}
+                                                <span>{post.timestamp ? new Date(post.timestamp.toDate()).toLocaleDateString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Just now'}</span>
+                                                <span style={{ opacity: 0.5 }}>•</span>
+
+                                                <div style={{
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    gap: '0.3rem',
+                                                    background: post.audience === 'class' ? 'rgba(99, 102, 241, 0.1)' : 'rgba(16, 185, 129, 0.1)',
+                                                    padding: '2px 8px',
+                                                    borderRadius: '6px',
+                                                    color: post.audience === 'class' ? 'var(--primary)' : '#10b981',
+                                                    fontWeight: '600'
+                                                }}>
+                                                    <Users size={10} />
+                                                    <span>{post.audience === 'class' ? (post.targetClassName || 'Class') : 'Everyone'}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        {user?.uid === post.teacherId && (
+                                            <div style={{ marginLeft: 'auto', position: 'relative', alignSelf: 'flex-start' }}>
+                                                <button
+                                                    onClick={() => setMenuOpenId(menuOpenId === post.id ? null : post.id)}
+                                                    style={{
+                                                        background: 'transparent',
+                                                        border: 'none',
+                                                        cursor: 'pointer',
+                                                        padding: '0.4rem',
+                                                        borderRadius: '50%',
+                                                        transition: 'background 0.2s',
+                                                        color: 'var(--text-muted)'
+                                                    }}
+                                                    className="hover-bg"
+                                                >
+                                                    <MoreVertical size={20} />
+                                                </button>
+
+                                                {menuOpenId === post.id && (
+                                                    <div style={{
+                                                        position: 'absolute',
+                                                        top: '100%',
+                                                        right: 0,
+                                                        background: 'var(--card-bg)',
+                                                        border: '1px solid var(--glass-border)',
+                                                        borderRadius: '12px',
+                                                        boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                                                        zIndex: 10,
+                                                        minWidth: '140px',
+                                                        marginTop: '0.5rem',
+                                                        overflow: 'hidden'
+                                                    }}>
+                                                        <button
+                                                            onClick={() => handleEdit(post)}
+                                                            style={{
+                                                                width: '100%',
+                                                                textAlign: 'left',
+                                                                padding: '0.75rem 1rem',
+                                                                background: 'transparent',
+                                                                border: 'none',
+                                                                borderBottom: '1px solid var(--glass-border)',
+                                                                cursor: 'pointer',
+                                                                display: 'flex',
+                                                                alignItems: 'center',
+                                                                gap: '0.5rem',
+                                                                color: 'var(--text-main)',
+                                                                fontSize: '0.9rem'
+                                                            }}
+                                                            className="hover-bg"
+                                                        >
+                                                            <FileText size={16} /> Edit Post
+                                                        </button>
+                                                        <button
+                                                            onClick={() => handleDelete(post.id, post.imageUrl || post.mediaUrl)}
+                                                            style={{
+                                                                width: '100%',
+                                                                textAlign: 'left',
+                                                                padding: '0.75rem 1rem',
+                                                                background: 'transparent',
+                                                                border: 'none',
+                                                                cursor: 'pointer',
+                                                                display: 'flex',
+                                                                alignItems: 'center',
+                                                                gap: '0.5rem',
+                                                                color: '#ef4444',
+                                                                fontSize: '0.9rem'
+                                                            }}
+                                                            className="hover-bg"
+                                                        >
+                                                            <LogOut size={16} style={{ transform: 'rotate(180deg)' }} /> Delete
+                                                        </button>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        )}
                                     </div>
 
-                                    {post.mediaUrl && post.mediaType === 'video' ? (
-                                        <video src={post.mediaUrl} controls style={{ width: '100%', maxHeight: '400px', background: 'black' }} />
-                                    ) : (post.mediaUrl || post.imageUrl) ? (
-                                        <img src={post.mediaUrl || post.imageUrl} style={{ width: '100%', maxHeight: '400px', objectFit: 'cover' }} />
-                                    ) : null}
+
+                                    {/* Post Content */}
+                                    {
+                                        post.backgroundStyle && post.backgroundStyle !== 'default' && !post.mediaUrl && !post.imageUrl ? (
+                                            // Styled Text Post
+                                            <div style={{
+                                                background: getBackgroundCss(post.backgroundStyle),
+                                                padding: '2.5rem 1.5rem',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                textAlign: 'center',
+                                                minHeight: '200px'
+                                            }}>
+                                                <p style={{
+                                                    color: 'white',
+                                                    fontSize: '1.25rem',
+                                                    fontWeight: '600',
+                                                    whiteSpace: 'pre-wrap',
+                                                    lineHeight: '1.6',
+                                                    textShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                                                }}>
+                                                    {post.text}
+                                                </p>
+                                            </div>
+                                        ) : (
+                                            // Standard Post
+                                            <>
+                                                <div style={{ padding: '0 1rem 1rem' }}>
+                                                    <p style={{ whiteSpace: 'pre-wrap', lineHeight: '1.6', color: 'var(--text-main)', fontSize: '0.95rem' }}>{post.text}</p>
+                                                </div>
+
+                                                {post.mediaUrl && post.mediaType === 'video' ? (
+                                                    <video src={post.mediaUrl} controls style={{ width: '100%', maxHeight: '400px', background: 'black' }} />
+                                                ) : (post.mediaUrl || post.imageUrl) ? (
+                                                    <img src={post.mediaUrl || post.imageUrl} style={{ width: '100%', maxHeight: '400px', objectFit: 'cover' }} />
+                                                ) : null}
+                                            </>
+                                        )
+                                    }
+
+                                    {/* Actions */}
+                                    < div style={{ padding: '0.75rem 1.25rem', borderTop: '1px solid var(--glass-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(0,0,0,0.02)' }}>
+                                        <div style={{ display: 'flex', gap: '1.5rem' }}>
+                                            <button
+                                                onClick={() => handleLike(post)}
+                                                style={{
+                                                    background: 'transparent', border: 'none', cursor: 'pointer',
+                                                    display: 'flex', alignItems: 'center', gap: '0.5rem',
+                                                    color: post.likes?.includes(user?.uid) ? '#3b82f6' : 'var(--text-muted)',
+                                                    fontSize: '0.9rem', fontWeight: '600',
+                                                    transition: 'transform 0.1s'
+                                                }}
+                                                className="btn-press"
+                                            >
+                                                <ThumbsUp size={18} fill={post.likes?.includes(user?.uid) ? '#3b82f6' : 'none'} />
+                                                <span>{post.likes?.length || 0}</span>
+                                            </button>
+                                            <button
+                                                onClick={() => handleShare(post)}
+                                                style={{
+                                                    background: 'transparent', border: 'none', cursor: 'pointer',
+                                                    display: 'flex', alignItems: 'center', gap: '0.5rem',
+                                                    color: 'var(--text-muted)', fontSize: '0.9rem', fontWeight: '600'
+                                                }}
+                                                className="btn-press"
+                                            >
+                                                <Share2 size={18} />
+                                                <span>{post.shares || 0}</span>
+                                            </button>
+                                        </div>
+                                    </div>
                                 </>
                             )}
-
-                            {/* Actions */}
-                            <div style={{ padding: '0.75rem 1.25rem', borderTop: '1px solid var(--glass-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(0,0,0,0.02)' }}>
-                                <div style={{ display: 'flex', gap: '1.5rem' }}>
-                                    <button
-                                        onClick={() => handleLike(post)}
-                                        style={{
-                                            background: 'transparent', border: 'none', cursor: 'pointer',
-                                            display: 'flex', alignItems: 'center', gap: '0.5rem',
-                                            color: post.likes?.includes(user?.uid) ? '#3b82f6' : 'var(--text-muted)',
-                                            fontSize: '0.9rem', fontWeight: '600',
-                                            transition: 'transform 0.1s'
-                                        }}
-                                        className="btn-press"
-                                    >
-                                        <ThumbsUp size={18} fill={post.likes?.includes(user?.uid) ? '#3b82f6' : 'none'} />
-                                        <span>{post.likes?.length || 0}</span>
-                                    </button>
-                                    <button
-                                        onClick={() => handleShare(post)}
-                                        style={{
-                                            background: 'transparent', border: 'none', cursor: 'pointer',
-                                            display: 'flex', alignItems: 'center', gap: '0.5rem',
-                                            color: 'var(--text-muted)', fontSize: '0.9rem', fontWeight: '600'
-                                        }}
-                                        className="btn-press"
-                                    >
-                                        <Share2 size={18} />
-                                        <span>{post.shares || 0}</span>
-                                    </button>
-                                </div>
-                            </div>
-
                         </div>
-                    ))}
-                </div>
+                    ))
+                    }
+                </div >
                 <BottomNav activeTab="new-task" setActiveTab={handleNavigation} />
-            </div>
+            </div >
         )
     }
+
+
 
     if (currentView === 'next-class') {
         return (

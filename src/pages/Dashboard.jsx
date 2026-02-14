@@ -31,6 +31,7 @@ import {
 import AttendanceView from '../components/AttendanceView';
 import PerformanceView from '../components/PerformanceView';
 import NextClassView from '../components/NextClassView';
+import AttendanceReport from '../components/AttendanceReport';
 import BottomNav from '../components/BottomNav';
 
 const Dashboard = ({ user }) => {
@@ -57,6 +58,17 @@ const Dashboard = ({ user }) => {
     const [audience, setAudience] = useState('all'); // 'all' or 'class'
     const [selectedClass, setSelectedClass] = useState('');
     const [classes, setClasses] = useState([]);
+    const [backgroundStyle, setBackgroundStyle] = useState('default'); // 'default', 'gradient-blue', 'gradient-pink', 'gradient-green', 'gradient-orange'
+
+    const getBackgroundCss = (styleId) => {
+        switch (styleId) {
+            case 'gradient-blue': return 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)';
+            case 'gradient-pink': return 'linear-gradient(135deg, #f43f5e 0%, #fb7185 100%)';
+            case 'gradient-green': return 'linear-gradient(135deg, #10b981 0%, #34d399 100%)';
+            case 'gradient-orange': return 'linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%)';
+            default: return 'var(--card-bg)';
+        }
+    };
 
     // Helper function to check if it's a new day
     const isNewDay = (lastUpdateTimestamp) => {
@@ -324,6 +336,7 @@ const Dashboard = ({ user }) => {
                 audience: audience,
                 targetClassId: audience === 'class' ? selectedClass : null,
                 targetClassName: targetClassName,
+                backgroundStyle: backgroundStyle || 'default',
                 likes: [],
                 shares: 0
             });
@@ -334,6 +347,7 @@ const Dashboard = ({ user }) => {
             setMediaType('image');
             setAudience('all');
             setSelectedClass('');
+            setBackgroundStyle('default');
             alert("Posted successfully!");
         } catch (error) {
             console.error("Error creating post:", error);
@@ -438,7 +452,15 @@ const Dashboard = ({ user }) => {
     if (currentView === 'attendance') {
         return (
             <div className="app-container" style={{ padding: '1.5rem' }}>
-                <AttendanceView user={user} onBack={() => setCurrentView('main')} />
+                <AttendanceView user={user} onBack={() => setCurrentView('main')} onReport={() => setCurrentView('attendance-report')} />
+            </div>
+        );
+    }
+
+    if (currentView === 'attendance-report') {
+        return (
+            <div className="app-container" style={{ padding: '0rem' }}>
+                <AttendanceReport user={user} onBack={() => setCurrentView('attendance')} />
             </div>
         );
     }
@@ -455,96 +477,213 @@ const Dashboard = ({ user }) => {
     if (currentView === 'feed') {
         return (
             <div className="app-container" style={{ padding: '1.5rem' }}>
-                <button onClick={() => setCurrentView('main')} style={{ background: 'rgba(255,255,255,0.1)', border: 'none', padding: '0.5rem 1rem', borderRadius: '10px', color: 'white', marginBottom: '1rem', cursor: 'pointer' }}>
-                    ← Back
-                </button>
-                <h2 style={{ fontSize: '1.5rem', fontWeight: 'bold', marginBottom: '1.5rem' }}>News Feed</h2>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+                    <button
+                        onClick={() => setCurrentView('main')}
+                        style={{
+                            background: 'var(--card-bg)', // Use theme-aware background
+                            border: '1px solid var(--glass-border)',
+                            padding: '0.6rem 1rem',
+                            borderRadius: '12px',
+                            color: 'var(--text-main)', // Use theme-aware text color
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.5rem',
+                            fontSize: '0.9rem',
+                            fontWeight: '600',
+                            boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)'
+                        }}>
+                        ← Back
+                    </button>
+
+                    {/* Feed Filter */}
+                    <div style={{ position: 'relative' }}>
+                        <select
+                            value={selectedClass} // Reusing selectedClass for filter when NOT posting? No, need separate state or clear logic.
+                            // Actually, let's keep it simple: The feed shows ALL posts by default. 
+                            // The user asked for "check it... it doesnt show specific class posting".
+                            // Let's add a purely visual filter for the feed list.
+                            onChange={(e) => {
+                                // This is a temporary local filter for viewing
+                                const val = e.target.value;
+                                // We'll handle filtering in the map below
+                                // For now, let's just use a local state or derived variable if we were doing complex filtering.
+                                // But wait, 'selectedClass' is currently used for *posting* content. 
+                                // We shouldn't mix "Viewing Filter" with "Posting Target" unless they are the same UI context.
+                                // Given the UI, let's add a specific filter state just for the list if needed, 
+                                // OR just show everything since "Admins/Teachers can see all". 
+                                // The user said "it doesnt show specific class posting", which might mean the *label* was missing.
+                                // I will add a small filter dropdown for "View: All / Class X"
+                            }}
+                            style={{
+                                display: 'none' // Hiding for now to focus on the Posting Logic first as per primary request
+                            }}
+                        >
+                            {/* ... */}
+                        </select>
+                    </div>
+                </div>
+
+                <h2 style={{ fontSize: '1.5rem', fontWeight: 'bold', marginBottom: '1.5rem', color: 'var(--text-main)' }}>News Feed</h2>
 
                 {/* Create Post Section */}
-                <div className="glass" style={{ padding: '1rem', borderRadius: '16px', marginBottom: '1.5rem' }}>
+                <div className="glass" style={{ padding: '1.25rem', borderRadius: '20px', marginBottom: '2rem' }}>
+
+                    {/* Background Options */}
+                    {!mediaFile && (
+                        <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem', overflowX: 'auto', paddingBottom: '0.5rem' }}>
+                            {[
+                                { id: 'default', bg: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.1)' },
+                                { id: 'gradient-blue', bg: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)', border: 'none' },
+                                { id: 'gradient-pink', bg: 'linear-gradient(135deg, #f43f5e 0%, #fb7185 100%)', border: 'none' },
+                                { id: 'gradient-green', bg: 'linear-gradient(135deg, #10b981 0%, #34d399 100%)', border: 'none' },
+                                { id: 'gradient-orange', bg: 'linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%)', border: 'none' },
+                            ].map((style) => (
+                                <button
+                                    key={style.id}
+                                    onClick={() => setBackgroundStyle(style.id)} // Need to add this state
+                                    style={{
+                                        width: '32px',
+                                        height: '32px',
+                                        borderRadius: '50%',
+                                        background: style.bg,
+                                        border: backgroundStyle === style.id ? '2px solid white' : style.border,
+                                        cursor: 'pointer',
+                                        flexShrink: 0,
+                                        boxShadow: backgroundStyle === style.id ? '0 0 0 2px var(--primary)' : 'none',
+                                        transition: 'all 0.2s ease'
+                                    }}
+                                />
+                            ))}
+                        </div>
+                    )}
+
                     <textarea
                         value={postText}
                         onChange={(e) => setPostText(e.target.value)}
                         placeholder="Share an update with the school..."
                         style={{
-                            width: '100%', background: 'rgba(0,0,0,0.2)', border: 'none', borderRadius: '8px',
-                            padding: '0.75rem', color: 'white', marginBottom: '1rem', resize: 'none', outline: 'none',
-                            fontFamily: 'inherit'
+                            width: '100%',
+                            background: backgroundStyle && backgroundStyle !== 'default' && !mediaFile
+                                ? getBackgroundCss(backgroundStyle)
+                                : 'rgba(0,0,0,0.2)',
+                            border: 'none',
+                            borderRadius: '12px',
+                            padding: '1rem',
+                            color: backgroundStyle && backgroundStyle !== 'default' && !mediaFile ? 'white' : 'var(--text-main)',
+                            marginBottom: '1rem',
+                            resize: 'none',
+                            outline: 'none',
+                            fontFamily: 'inherit',
+                            minHeight: backgroundStyle && backgroundStyle !== 'default' && !mediaFile ? '150px' : '100px',
+                            fontSize: backgroundStyle && backgroundStyle !== 'default' && !mediaFile ? '1.1rem' : '1rem',
+                            fontWeight: backgroundStyle && backgroundStyle !== 'default' && !mediaFile ? '600' : '400',
+                            textAlign: backgroundStyle && backgroundStyle !== 'default' && !mediaFile ? 'center' : 'left',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            justifyContent: 'center',
+                            transition: 'all 0.3s ease',
+                            '::placeholder': { color: 'rgba(255,255,255,0.6)' }
                         }}
                     />
 
                     {mediaPreview && (
                         <div style={{ marginBottom: '1rem', position: 'relative' }}>
                             {mediaType === 'video' ? (
-                                <video src={mediaPreview} controls style={{ maxWidth: '100%', maxHeight: '200px', borderRadius: '8px', background: 'black' }} />
+                                <video src={mediaPreview} controls style={{ maxWidth: '100%', maxHeight: '200px', borderRadius: '12px', background: 'black' }} />
                             ) : (
-                                <img src={mediaPreview} style={{ maxWidth: '100%', maxHeight: '200px', borderRadius: '8px', objectFit: 'cover' }} />
+                                <img src={mediaPreview} style={{ maxWidth: '100%', maxHeight: '200px', borderRadius: '12px', objectFit: 'cover' }} />
                             )}
                             <button
                                 onClick={() => { setMediaFile(null); setMediaPreview(null); }}
-                                style={{ position: 'absolute', top: 5, right: 5, background: 'rgba(0,0,0,0.5)', borderRadius: '50%', border: 'none', color: 'white', width: 24, height: 24, cursor: 'pointer' }}
+                                style={{ position: 'absolute', top: 5, right: 5, background: 'rgba(0,0,0,0.5)', borderRadius: '50%', border: 'none', color: 'white', width: 28, height: 28, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                             >
                                 ×
                             </button>
                         </div>
                     )}
 
-                    {/* Audience Selection */}
-                    <div style={{ marginBottom: '1rem', }}>
-                        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
-                            <span style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                <Users size={14} /> To:
-                            </span>
+                    {/* Unified Target Selection */}
+                    <div style={{ marginBottom: '1.25rem' }}>
+                        <div style={{
+                            background: 'rgba(255,255,255,0.05)',
+                            borderRadius: '12px',
+                            padding: '0.5rem',
+                            display: 'flex',
+                            alignItems: 'center',
+                            border: '1px solid var(--glass-border)'
+                        }}>
+                            <div style={{
+                                padding: '0.5rem',
+                                color: 'var(--text-muted)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '0.5rem',
+                                fontSize: '0.9rem',
+                                fontWeight: '600'
+                            }}>
+                                <Users size={16} />
+                                <span>Post to:</span>
+                            </div>
 
-                            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.8rem', color: 'white' }}>
-                                <input
-                                    type="radio"
-                                    name="audience"
-                                    value="all"
-                                    checked={audience === 'all'}
-                                    onChange={() => setAudience('all')}
-                                />
-                                All
-                            </label>
-
-                            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.8rem', color: 'white' }}>
-                                <input
-                                    type="radio"
-                                    name="audience"
-                                    value="class"
-                                    checked={audience === 'class'}
-                                    onChange={() => setAudience('class')}
-                                />
-                                Specific Class
-                            </label>
-
-                            {audience === 'class' && (
+                            <div style={{ flex: 1, position: 'relative' }}>
                                 <select
-                                    value={selectedClass}
-                                    onChange={(e) => setSelectedClass(e.target.value)}
+                                    value={audience === 'all' ? 'all' : selectedClass}
+                                    onChange={(e) => {
+                                        if (e.target.value === 'all') {
+                                            setAudience('all');
+                                            setSelectedClass('');
+                                        } else {
+                                            setAudience('class');
+                                            setSelectedClass(e.target.value);
+                                        }
+                                    }}
                                     style={{
-                                        padding: '0.3rem', borderRadius: '6px', border: 'none',
-                                        fontSize: '0.8rem', outline: 'none', marginLeft: '0.5rem',
-                                        background: 'rgba(255,255,255,0.1)', color: 'white'
+                                        width: '100%',
+                                        background: 'transparent',
+                                        border: 'none',
+                                        color: 'var(--text-main)',
+                                        fontSize: '0.9rem',
+                                        fontWeight: '500',
+                                        padding: '0.5rem',
+                                        outline: 'none',
+                                        cursor: 'pointer',
+                                        appearance: 'none' // Remove default arrow to style commonly? Or keep for native feel
                                     }}
                                 >
-                                    <option value="" style={{ color: 'black' }}>Select Class...</option>
-                                    {classes.map(cls => (
-                                        <option key={cls.id} value={cls.id} style={{ color: 'black' }}>{cls.name}</option>
-                                    ))}
+                                    <option value="all" style={{ color: 'black' }}>Everyone (All Classes)</option>
+                                    <optgroup label="Specific Class" style={{ color: 'black' }}>
+                                        {classes.map(cls => (
+                                            <option key={cls.id} value={cls.id} style={{ color: 'black' }}>{cls.name}</option>
+                                        ))}
+                                    </optgroup>
                                 </select>
-                            )}
+                                <ChevronRight
+                                    size={14}
+                                    style={{
+                                        position: 'absolute',
+                                        right: '10px',
+                                        top: '50%',
+                                        transform: 'translateY(-50%) rotate(90deg)',
+                                        pointerEvents: 'none',
+                                        color: 'var(--text-muted)'
+                                    }}
+                                />
+                            </div>
                         </div>
                     </div>
 
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <div style={{ display: 'flex', gap: '1rem' }}>
-                            <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: '#10b981', cursor: 'pointer', fontSize: '0.9rem' }}>
-                                <FileText size={18} /> Photo
+                            <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: '#10b981', cursor: 'pointer', fontSize: '0.9rem', padding: '0.4rem 0.8rem', borderRadius: '8px', background: 'rgba(16, 185, 129, 0.1)' }}>
+                                <FileText size={18} />
+                                <span style={{ fontSize: '0.8rem', fontWeight: '600' }}>Photo</span>
                                 <input type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => handleFileChange(e, 'image')} />
                             </label>
-                            <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: '#f43f5e', cursor: 'pointer', fontSize: '0.9rem' }}>
-                                <FileText size={18} /> Video
+                            <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: '#f43f5e', cursor: 'pointer', fontSize: '0.9rem', padding: '0.4rem 0.8rem', borderRadius: '8px', background: 'rgba(244, 63, 94, 0.1)' }}>
+                                <FileText size={18} />
+                                <span style={{ fontSize: '0.8rem', fontWeight: '600' }}>Video</span>
                                 <input type="file" accept="video/*" style={{ display: 'none' }} onChange={(e) => handleFileChange(e, 'video')} />
                             </label>
                         </div>
@@ -553,77 +692,144 @@ const Dashboard = ({ user }) => {
                             disabled={!postText && !mediaFile || posting}
                             className="btn-press"
                             style={{
-                                background: 'var(--primary)', color: 'white', border: 'none',
-                                padding: '0.5rem 1.25rem', borderRadius: '8px', fontWeight: 'bold',
-                                opacity: (!postText && !mediaFile || posting) ? 0.5 : 1
+                                background: 'var(--primary)',
+                                color: 'white',
+                                border: 'none',
+                                padding: '0.6rem 1.5rem',
+                                borderRadius: '10px',
+                                fontWeight: 'bold',
+                                opacity: (!postText && !mediaFile || posting) ? 0.5 : 1,
+                                boxShadow: '0 4px 12px rgba(99, 102, 241, 0.3)'
                             }}
                         >
-                            {posting ? 'Posting...' : 'Post'}
+                            {posting ? <Loader2 className="animate-spin" size={20} /> : <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}><span>Post</span><Send size={16} /></div>}
                         </button>
                     </div>
                 </div>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-                    {posts.length === 0 && <p style={{ textAlign: 'center', color: '#94a3b8' }}>No announcements yet.</p>}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', paddingBottom: '100px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <h3 style={{ fontSize: '1.1rem', fontWeight: 'bold' }}>Recent Updates</h3>
+                        {/* Optional Filter Visual Indicator */}
+                    </div>
+
+                    {posts.length === 0 && (
+                        <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
+                            <div style={{ background: 'rgba(255,255,255,0.05)', width: '60px', height: '60px', borderRadius: '50%', margin: '0 auto 1rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                <FileText size={24} opacity={0.5} />
+                            </div>
+                            <p>No announcements yet.</p>
+                        </div>
+                    )}
+
                     {posts.map(post => (
-                        <div key={post.id} className="glass" style={{ padding: '0', overflow: 'hidden', borderRadius: '16px' }}>
+                        <div key={post.id} className="glass" style={{ padding: '0', overflow: 'hidden', borderRadius: '20px' }}>
                             <div style={{ padding: '1rem', display: 'flex', gap: '1rem', alignItems: 'center' }}>
-                                <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: 'rgba(255,255,255,0.1)', overflow: 'hidden' }}>
-                                    {post.authorImage ? <img src={post.authorImage} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <Shield size={24} style={{ margin: '8px' }} />}
+                                <div style={{ width: '45px', height: '45px', borderRadius: '14px', background: 'rgba(255,255,255,0.1)', overflow: 'hidden' }}>
+                                    {post.authorImage ? <img src={post.authorImage} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <Shield size={24} style={{ margin: '10px' }} />}
                                 </div>
                                 <div>
-                                    <h3 style={{ fontSize: '1rem', fontWeight: 'bold' }}>{post.authorName || 'Principal'}</h3>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem', color: '#94a3b8' }}>
-                                        <span>{post.timestamp ? new Date(post.timestamp.toDate()).toLocaleDateString() : 'Just now'}</span>
-                                        {post.audience === 'class' && (
+                                    <h3 style={{ fontSize: '1rem', fontWeight: 'bold', color: 'var(--text-main)' }}>{post.authorName || 'Principal'}</h3>
+
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                                        {post.role === 'Teacher' && (
                                             <>
-                                                <span>•</span>
-                                                <Users size={12} />
-                                                <span>{post.targetClassName || 'Class'}</span>
+                                                <span style={{
+                                                    background: 'rgba(99, 102, 241, 0.15)',
+                                                    color: 'var(--primary)',
+                                                    padding: '2px 8px',
+                                                    borderRadius: '6px',
+                                                    fontWeight: '700',
+                                                    fontSize: '0.7rem'
+                                                }}>
+                                                    Teacher
+                                                </span>
+                                                <span style={{ opacity: 0.5 }}>•</span>
                                             </>
                                         )}
-                                        {post.audience === 'all' && (
-                                            <>
-                                                <span>•</span>
-                                                <Users size={12} />
-                                                <span>All</span>
-                                            </>
-                                        )}
+                                        <span>{post.timestamp ? new Date(post.timestamp.toDate()).toLocaleDateString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Just now'}</span>
+                                        <span style={{ opacity: 0.5 }}>•</span>
+
+                                        <div style={{
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '0.3rem',
+                                            background: post.audience === 'class' ? 'rgba(99, 102, 241, 0.1)' : 'rgba(16, 185, 129, 0.1)',
+                                            padding: '2px 8px',
+                                            borderRadius: '6px',
+                                            color: post.audience === 'class' ? 'var(--primary)' : '#10b981',
+                                            fontWeight: '600'
+                                        }}>
+                                            <Users size={10} />
+                                            <span>{post.audience === 'class' ? (post.targetClassName || 'Class') : 'Everyone'}</span>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
-                            <div style={{ padding: '0 1rem 1rem' }}>
-                                <p style={{ whiteSpace: 'pre-wrap', marginBottom: '1rem', lineHeight: '1.5' }}>{post.text}</p>
-                            </div>
 
-                            {post.mediaUrl && post.mediaType === 'video' ? (
-                                <video src={post.mediaUrl} controls style={{ width: '100%', maxHeight: '400px', background: 'black' }} />
-                            ) : (post.mediaUrl || post.imageUrl) ? (
-                                <img src={post.mediaUrl || post.imageUrl} style={{ width: '100%', maxHeight: '400px', objectFit: 'cover' }} />
-                            ) : null}
+                            {/* Post Content */}
+                            {post.backgroundStyle && post.backgroundStyle !== 'default' && !post.mediaUrl && !post.imageUrl ? (
+                                // Styled Text Post
+                                <div style={{
+                                    background: getBackgroundCss(post.backgroundStyle),
+                                    padding: '2.5rem 1.5rem',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    textAlign: 'center',
+                                    minHeight: '200px'
+                                }}>
+                                    <p style={{
+                                        color: 'white',
+                                        fontSize: '1.25rem',
+                                        fontWeight: '600',
+                                        whiteSpace: 'pre-wrap',
+                                        lineHeight: '1.6',
+                                        textShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                                    }}>
+                                        {post.text}
+                                    </p>
+                                </div>
+                            ) : (
+                                // Standard Post
+                                <>
+                                    <div style={{ padding: '0 1rem 1rem' }}>
+                                        <p style={{ whiteSpace: 'pre-wrap', lineHeight: '1.6', color: 'var(--text-main)', fontSize: '0.95rem' }}>{post.text}</p>
+                                    </div>
+
+                                    {post.mediaUrl && post.mediaType === 'video' ? (
+                                        <video src={post.mediaUrl} controls style={{ width: '100%', maxHeight: '400px', background: 'black' }} />
+                                    ) : (post.mediaUrl || post.imageUrl) ? (
+                                        <img src={post.mediaUrl || post.imageUrl} style={{ width: '100%', maxHeight: '400px', objectFit: 'cover' }} />
+                                    ) : null}
+                                </>
+                            )}
 
                             {/* Actions */}
-                            <div style={{ padding: '0.75rem 1rem', borderTop: '1px solid rgba(255,255,255,0.1)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <div style={{ padding: '0.75rem 1.25rem', borderTop: '1px solid var(--glass-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(0,0,0,0.02)' }}>
                                 <div style={{ display: 'flex', gap: '1.5rem' }}>
                                     <button
                                         onClick={() => handleLike(post)}
                                         style={{
                                             background: 'transparent', border: 'none', cursor: 'pointer',
-                                            display: 'flex', alignItems: 'center', gap: '0.4rem',
-                                            color: post.likes?.includes(user?.uid) ? '#f87171' : '#94a3b8',
-                                            fontSize: '0.9rem', fontWeight: '600'
+                                            display: 'flex', alignItems: 'center', gap: '0.5rem',
+                                            color: post.likes?.includes(user?.uid) ? '#3b82f6' : 'var(--text-muted)',
+                                            fontSize: '0.9rem', fontWeight: '600',
+                                            transition: 'transform 0.1s'
                                         }}
+                                        className="btn-press"
                                     >
-                                        <ThumbsUp size={18} fill={post.likes?.includes(user?.uid) ? '#f87171' : 'none'} />
+                                        <ThumbsUp size={18} fill={post.likes?.includes(user?.uid) ? '#3b82f6' : 'none'} />
                                         <span>{post.likes?.length || 0}</span>
                                     </button>
                                     <button
                                         onClick={() => handleShare(post)}
                                         style={{
                                             background: 'transparent', border: 'none', cursor: 'pointer',
-                                            display: 'flex', alignItems: 'center', gap: '0.4rem',
-                                            color: '#94a3b8', fontSize: '0.9rem', fontWeight: '600'
+                                            display: 'flex', alignItems: 'center', gap: '0.5rem',
+                                            color: 'var(--text-muted)', fontSize: '0.9rem', fontWeight: '600'
                                         }}
+                                        className="btn-press"
                                     >
                                         <Share2 size={18} />
                                         <span>{post.shares || 0}</span>

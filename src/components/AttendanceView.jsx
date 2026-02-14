@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { db, storage } from '../firebase';
 import { collection, query, getDocs, where, orderBy, serverTimestamp, writeBatch, doc, addDoc } from 'firebase/firestore';
 import { ref, getDownloadURL } from 'firebase/storage';
-import { ChevronLeft, UserCheck, Search, Loader2, User } from 'lucide-react';
+import { ChevronLeft, UserCheck, Search, Loader2, User, ChevronRight } from 'lucide-react';
 
 // Component to fetch and display student profile image
 const StudentAvatar = ({ studentId, schoolId, profilePic, size = 48 }) => {
@@ -87,7 +87,7 @@ const StudentAvatar = ({ studentId, schoolId, profilePic, size = 48 }) => {
     );
 };
 
-const AttendanceView = ({ user, onBack }) => {
+const AttendanceView = ({ user, onBack, onReport }) => {
     const [students, setStudents] = useState([]);
     const [loading, setLoading] = useState(true);
     const [attendance, setAttendance] = useState({}); // { studentId: 'present' | 'absent' }
@@ -305,17 +305,37 @@ const AttendanceView = ({ user, onBack }) => {
             animate={{ opacity: 1, scale: 1 }}
             style={{ display: 'flex', flexDirection: 'column', height: '100%', paddingBottom: '120px' }}
         >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1.5rem', paddingTop: '1rem' }}>
-                <button
-                    onClick={onBack}
-                    className="btn-press"
-                    style={{ background: 'var(--back-btn-bg)', border: 'none', color: 'var(--back-btn-text)', width: '44px', height: '44px', borderRadius: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <ChevronLeft size={24} />
-                </button>
-                <div>
-                    <h2 style={{ fontSize: '1.5rem', fontWeight: '800' }}>Mark Attendance</h2>
-                    <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>{assignedClass.name} • {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</p>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem', paddingTop: '1rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                    <button
+                        onClick={onBack}
+                        className="btn-press"
+                        style={{ background: 'var(--back-btn-bg)', border: 'none', color: 'var(--back-btn-text)', width: '44px', height: '44px', borderRadius: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <ChevronLeft size={24} />
+                    </button>
+                    <div>
+                        <h2 style={{ fontSize: '1.5rem', fontWeight: '800' }}>Mark Attendance</h2>
+                        <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>{assignedClass.name} • {new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}</p>
+                    </div>
                 </div>
+                <button
+                    onClick={onReport}
+                    className="btn-press"
+                    style={{
+                        background: 'var(--primary)',
+                        border: 'none',
+                        color: 'white',
+                        width: '44px',
+                        height: '44px',
+                        borderRadius: '14px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        boxShadow: '0 4px 12px var(--primary-glow)'
+                    }}
+                >
+                    <ChevronRight size={24} />
+                </button>
             </div>
 
             {/* Attendance Stats Cards */}

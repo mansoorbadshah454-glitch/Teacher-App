@@ -100,8 +100,8 @@ const BottomNav = ({ activeTab, setActiveTab }) => {
                 >
                     <NavIcon icon={Home} label="Home" active={activeTab === 'home'} onClick={() => setActiveTab('home')} />
 
-                    {/* Changed from Classes to Next Class Shortcut */}
-                    <NavIcon icon={Clock} label="Next Class" active={activeTab === 'next-class'} onClick={() => setActiveTab('next-class')} />
+                    {/* Performance Button */}
+                    <NavIcon icon={BarChart3} label="Performance" active={activeTab === 'performance'} onClick={() => setActiveTab('performance')} />
 
                     {/* Central "Notebook" Button */}
                     <div style={{ position: 'relative', marginTop: '-35px' }}>
@@ -126,7 +126,8 @@ const BottomNav = ({ activeTab, setActiveTab }) => {
                         </button>
                     </div>
 
-                    <NavIcon icon={BarChart3} label="Performance" active={activeTab === 'performance'} onClick={() => setActiveTab('performance')} />
+                    {/* Changed from Classes to Next Class Shortcut */}
+                    <NavIcon icon={Clock} label="Next Class" active={activeTab === 'next-class'} onClick={() => setActiveTab('next-class')} />
                     <NavIcon icon={User} label="Profile" active={activeTab === 'profile'} onClick={() => setActiveTab('profile')} />
                 </motion.footer>
             )}

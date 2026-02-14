@@ -2,8 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { auth, db, storage } from '../firebase';
-import { addDoc, collection, serverTimestamp, doc, onSnapshot, query, orderBy, updateDoc, setDoc, arrayUnion, arrayRemove, increment, getDocs, getDoc } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { addDoc, collection, serverTimestamp, doc, onSnapshot, query, orderBy, updateDoc, setDoc, arrayUnion, arrayRemove, increment, getDocs, getDoc, deleteDoc } from 'firebase/firestore';
+import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import {
     UserCheck,
     FileText,
@@ -93,6 +93,18 @@ const Dashboard = ({ user }) => {
         document.documentElement.setAttribute('data-theme', savedTheme);
     }, []);
 
+    // Close menu when clicking outside
+    useEffect(() => {
+        const handleClickOutside = () => setMenuOpenId(null);
+        document.addEventListener('click', handleClickOutside);
+        return () => document.removeEventListener('click', handleClickOutside);
+    }, []);
+
+    const toggleMenu = (e, postId) => {
+        e.stopPropagation();
+        setMenuOpenId(menuOpenId === postId ? null : postId);
+    };
+
     const toggleTheme = () => {
         const newTheme = theme === 'dark' ? 'light' : 'dark';
         setTheme(newTheme);
@@ -163,6 +175,9 @@ const Dashboard = ({ user }) => {
                     }
                 }
             });
+
+
+
 
             // Fetch School Info (Logo) - Much more robust
             const fetchSchoolInfo = async () => {
@@ -349,7 +364,7 @@ const Dashboard = ({ user }) => {
                     targetClassName: targetClassName,
                     backgroundStyle: backgroundStyle || 'default',
                     updatedAt: serverTimestamp(),
-                    // teacherId: user.uid, // Removed to avoid "immutable field" rule violation
+                    teacherId: user.uid, // Restored ownership claim
                     // Only update media fields if new media was uploaded
                     ...(mediaFile && {
                         mediaUrl: mediaUrl,
@@ -447,27 +462,25 @@ const Dashboard = ({ user }) => {
 
     const handleDelete = async (postId, imageUrl) => {
         if (!user || !user.schoolId) return;
-        if (window.confirm("Delete this post?")) {
-            try {
-                await deleteDoc(doc(db, `schools/${user.schoolId}/posts`, postId));
-                if (imageUrl) {
-                    try {
-                        const imageRef = ref(storage, imageUrl);
-                        // Check if it's a firebase storage url before deleting
-                        if (imageUrl.includes('firebase')) {
-                            // This might need more robust checking but try/catch handles it
-                            // await deleteObject(imageRef); 
-                            // Skip actual file delete for now to avoid permission errors if shared
-                        }
-                    } catch (e) {
-                        console.log("Image delete skipped/failed", e);
-                    }
+        if (!window.confirm("Are you sure you want to delete this post?")) return;
+
+        try {
+            await deleteDoc(doc(db, `schools/${user.schoolId}/posts`, postId));
+
+            if (imageUrl) {
+                try {
+                    const imageRef = ref(storage, imageUrl);
+                    await deleteObject(imageRef);
+                } catch (imgError) {
+                    console.warn("Failed to delete post image:", imgError);
                 }
-                setMenuOpenId(null);
-            } catch (error) {
-                console.error("Error deleting post:", error);
-                alert("Failed to delete post.");
             }
+            alert("Post deleted successfully.");
+        } catch (error) {
+            console.error("Error deleting post:", error);
+            alert("Failed to delete post: " + error.message);
+        } finally {
+            setMenuOpenId(null);
         }
     };
 
@@ -1033,7 +1046,7 @@ const Dashboard = ({ user }) => {
                                         {user?.uid === post.teacherId && (
                                             <div style={{ marginLeft: 'auto', position: 'relative', alignSelf: 'flex-start' }}>
                                                 <button
-                                                    onClick={() => setMenuOpenId(menuOpenId === post.id ? null : post.id)}
+                                                    onClick={(e) => toggleMenu(e, post.id)}
                                                     style={{
                                                         background: 'transparent',
                                                         border: 'none',

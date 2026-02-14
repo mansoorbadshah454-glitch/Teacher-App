@@ -1258,7 +1258,8 @@ const Dashboard = ({ user }) => {
                 color: 'var(--header-text)',
                 padding: '1rem',
                 borderRadius: '24px',
-                transition: 'all 0.3s ease'
+                transition: 'all 0.3s ease',
+                marginBottom: '1.5rem'
             }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
                     <div style={{
@@ -1277,7 +1278,14 @@ const Dashboard = ({ user }) => {
                     </div>
                     <div>
                         <h1 style={{ fontSize: '1.25rem', fontWeight: '700' }}>Hello, {user.name?.split(' ')[0] || 'Teacher'}!</h1>
-                        <p style={{ fontSize: '0.85rem', color: 'var(--header-subtext)' }}>Good Morning 👋</p>
+                        <p style={{ fontSize: '0.85rem', color: 'var(--header-subtext)' }}>
+                            {(() => {
+                                const hour = new Date().getHours();
+                                if (hour < 12) return 'Good Morning';
+                                if (hour < 18) return 'Good Afternoon';
+                                return 'Good Evening';
+                            })()} 👋
+                        </p>
                     </div>
                 </div>
 

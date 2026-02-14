@@ -516,10 +516,10 @@ const Dashboard = ({ user }) => {
     };
 
     const stats = [
-        { id: 'attendance', title: 'Attendance', icon: UserCheck, color: '#6366f1', description: 'Mark today\'s presence', action: () => setCurrentView('attendance') },
         { id: 'news-feed', title: 'News Feed', icon: FileText, color: '#10b981', description: 'School announcements', action: () => setCurrentView('feed') },
+        { id: 'attendance', title: 'Attendance', icon: UserCheck, color: '#6366f1', description: 'Mark today\'s presence', action: () => setCurrentView('attendance') },
         { id: 'performance', title: 'Performance', icon: BarChart3, color: '#8b5cf6', description: 'Update student scores', action: () => setCurrentView('performance') },
-        { id: 'notebook', title: 'Notebook', icon: BookOpen, color: '#f59e0b', description: 'My personal notes', action: () => setCurrentView('notebook') },
+        { id: 'next-class', title: 'Next Class', icon: Clock, color: '#f59e0b', description: 'Update class scores', action: () => setCurrentView('next-class') },
     ];
 
     const handleLogout = () => {
@@ -1217,7 +1217,7 @@ const Dashboard = ({ user }) => {
         console.log("Dashboard: Rendering NextClassView");
         return (
             <div className="app-container" style={{ padding: '1.5rem', paddingBottom: '120px' }}>
-                <NextClassView user={user} onBack={() => setCurrentView('main')} />
+                <NextClassView user={user} onBack={() => { setCurrentView('main'); setActiveTab('home'); }} />
                 <BottomNav activeTab="next-class" setActiveTab={handleNavigation} />
             </div>
         );
@@ -1227,7 +1227,7 @@ const Dashboard = ({ user }) => {
         console.log("Dashboard: Rendering Notebook");
         return (
             <div className="app-container" style={{ padding: '1.5rem', paddingBottom: '120px' }}>
-                <Notebook user={user} onBack={() => setCurrentView('main')} />
+                <Notebook user={user} onBack={() => { setCurrentView('main'); setActiveTab('home'); }} />
                 <BottomNav activeTab="notebook" setActiveTab={handleNavigation} />
             </div>
         );

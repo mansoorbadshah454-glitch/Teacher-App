@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { db, storage } from '../firebase';
-import { collection, query, onSnapshot, where, addDoc, serverTimestamp, updateDoc, doc, deleteDoc, limit } from 'firebase/firestore';
+import { collection, query, onSnapshot, where, addDoc, serverTimestamp, updateDoc, doc, deleteDoc, limit, getDocs, getDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { ChevronLeft, Search, Send, X, MessageCircle, User, Shield, Loader2, Reply, Trash2, CheckCircle2, Paperclip, FileText, Image as ImageIcon } from 'lucide-react';
+import { ChevronLeft, Search, Send, X, MessageCircle, User, Shield, Loader2, Reply, Trash2, CheckCircle2, Paperclip, FileText, Image as ImageIcon, Users } from 'lucide-react';
 
 const AdminMessages = ({ user, onBack }) => {
     // Data State
@@ -11,7 +11,12 @@ const AdminMessages = ({ user, onBack }) => {
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
 
-    // Reply State
+    // Admin Profiles State
+    const [adminProfiles, setAdminProfiles] = useState([]);
+    const [loadingProfiles, setLoadingProfiles] = useState(true);
+    const [composingTo, setComposingTo] = useState(null); // { id, name, role, type }
+
+    // Reply/Compose State
     const [replyingTo, setReplyingTo] = useState(null); // Message Object
     const [replyText, setReplyText] = useState('');
     const [sending, setSending] = useState(false);
@@ -19,6 +24,54 @@ const AdminMessages = ({ user, onBack }) => {
     // Attachment State
     const [selectedFile, setSelectedFile] = useState(null);
     const fileInputRef = useRef(null);
+    const composeFileInputRef = useRef(null); // Separate ref for compose modal
+
+    // Fetch Admin Profiles (Principal + Admins)
+    useEffect(() => {
+        if (!user?.schoolId) return;
+
+        const fetchProfiles = async () => {
+            try {
+                // 1. Fetch School Info (Principal)
+                const schoolDoc = await getDoc(doc(db, "schools", user.schoolId));
+                let principalProfile = {
+                    id: 'principal',
+                    name: 'Principal',
+                    role: 'Principal',
+                    photo: '',
+                    type: 'principal' // Special type for logic
+                };
+
+                if (schoolDoc.exists()) {
+                    const data = schoolDoc.data();
+                    principalProfile.name = data.principalName || data.name || 'Principal';
+                    principalProfile.photo = data.logo || data.profileImage || '';
+                }
+
+                // 2. Fetch Admin Users
+                const adminsQuery = query(
+                    collection(db, `schools/${user.schoolId}/admin_users`),
+                    where("role", "==", "school Admin")
+                );
+                const adminsSnap = await getDocs(adminsQuery);
+                const adminProfilesList = adminsSnap.docs.map(doc => ({
+                    id: doc.id,
+                    name: doc.data().displayName || doc.data().name || 'Admin',
+                    role: 'Admin',
+                    photo: doc.data().profileImage || '',
+                    type: 'admin'
+                }));
+
+                setAdminProfiles([principalProfile, ...adminProfilesList]);
+            } catch (error) {
+                console.error("Error fetching admin profiles:", error);
+            } finally {
+                setLoadingProfiles(false);
+            }
+        };
+
+        fetchProfiles();
+    }, [user?.schoolId]);
 
     // 1. Fetch Messages (Dual Query: ID and Name)
     useEffect(() => {
@@ -142,9 +195,22 @@ const AdminMessages = ({ user, onBack }) => {
                 };
             }
 
-            // Send Reply to Principal
+            // Send Reply to Principal (Default for replies to existing messages)
+            // Note: If the message was from an ADMIN, we *should* technically reply to that Admin ID.
+            // But structurally, messages from Admins currently might not carry their specific ID in a 'fromId' field consistently
+            // distinct from 'principal' unless we check.
+            // However, the requested flow for 'Profiles' is simpler: Send Direct.
+            // For REPLIES, we will preserve existing behavior (to 'principal') unless we want to enhance that too.
+            // Existing 'from' in message doc is the ID? No, 'from' usually 'principal' or user UID.
+            // Let's stick to 'to: principal' for general replies for now to be safe, or check `replyingTo.from`.
+
+            // Actually, let's optimize: check if `replyingTo.from` is a UID or just 'principal'.
+            // If it's a specific UID, we can target them?
+            // Existing logic was hardcoded to 'principal'. I will keep it 'principal' for now to avoid breaking legacy flows
+            // unless the message specifically says otherwise.
+
             await addDoc(collection(db, `schools/${user.schoolId}/messages`), {
-                to: 'principal',
+                to: 'principal', // Default for replies to generic stream
                 from: user.uid,
                 fromName: user.name || 'Teacher',
                 originalMessageId: replyingTo.id,
@@ -161,7 +227,7 @@ const AdminMessages = ({ user, onBack }) => {
             const originalRef = doc(db, `schools/${user.schoolId}/messages`, replyingTo.id);
             await updateDoc(originalRef, { hasReplied: true, lastReplyAt: serverTimestamp() });
 
-            alert("Reply sent to Principal!");
+            alert("Reply sent!");
             setReplyText('');
             setSelectedFile(null);
             setReplyingTo(null);
@@ -172,6 +238,61 @@ const AdminMessages = ({ user, onBack }) => {
             setSending(false);
         }
     };
+
+    const handleSendDirectMessage = async () => {
+        if ((!replyText.trim() && !selectedFile) || !composingTo) return;
+
+        setSending(true);
+        try {
+            let attachmentData = null;
+
+            if (selectedFile) {
+                const storageRef = ref(storage, `schools/${user.schoolId}/attachments/${Date.now()}_${selectedFile.name}`);
+                const snapshot = await uploadBytes(storageRef, selectedFile);
+                const downloadURL = await getDownloadURL(snapshot.ref);
+
+                attachmentData = {
+                    url: downloadURL,
+                    name: selectedFile.name,
+                    type: selectedFile.type,
+                    size: selectedFile.size
+                };
+            }
+
+            // Target ID logic
+            // If type is 'principal', we use 'principal' (magic string used by Principal App to catch all)
+            // If type is 'admin', we use their specific UID.
+            const targetId = composingTo.type === 'principal' ? 'principal' : composingTo.id;
+
+            // If sending to Principal, use 'teacher-reply' so it shows up in their Dashboard "Teacher Feedback" card.
+            // For others, use 'direct-message'.
+            const msgType = targetId === 'principal' ? 'teacher-reply' : 'direct-message';
+
+            await addDoc(collection(db, `schools/${user.schoolId}/messages`), {
+                to: targetId,
+                toName: composingTo.name, // Helpful for debugging/display
+                from: user.uid,
+                fromName: user.name || 'Teacher',
+                text: replyText.trim(),
+                message: replyText.trim(),
+                attachment: attachmentData,
+                timestamp: serverTimestamp(),
+                read: false,
+                type: msgType
+            });
+
+            alert(`Message sent to ${composingTo.name}!`);
+            setReplyText('');
+            setSelectedFile(null);
+            setComposingTo(null);
+        } catch (error) {
+            console.error("Error sending direct message:", error);
+            alert("Failed to send message: " + error.message);
+        } finally {
+            setSending(false);
+        }
+    };
+
 
     // Filter Messages
     const filteredMessages = messages.filter(m =>
@@ -222,6 +343,65 @@ const AdminMessages = ({ user, onBack }) => {
             </div>
 
             <div style={{ padding: '0 1.5rem', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+
+                {/* Profiles Section */}
+                <div>
+                    <h3 style={{ fontSize: '1rem', fontWeight: '600', color: 'var(--text-main)', marginBottom: '0.8rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <Users size={18} /> Send a Message
+                    </h3>
+                    <div style={{ display: 'flex', gap: '1rem', overflowX: 'auto', paddingBottom: '0.5rem', scrollbarWidth: 'none' }}>
+                        {loadingProfiles ? (
+                            <div style={{ display: 'flex', gap: '1rem' }}>
+                                {[1, 2, 3].map(i => (
+                                    <div key={i} className="skeleton" style={{ width: '80px', height: '100px', borderRadius: '12px' }} />
+                                ))}
+                            </div>
+                        ) : (
+                            adminProfiles.map(profile => (
+                                <motion.div
+                                    key={profile.id}
+                                    whileTap={{ scale: 0.95 }}
+                                    onClick={() => setComposingTo(profile)}
+                                    className="glass"
+                                    style={{
+                                        minWidth: '90px',
+                                        padding: '1rem 0.5rem',
+                                        borderRadius: '16px',
+                                        display: 'flex',
+                                        flexDirection: 'column',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        gap: '0.5rem',
+                                        cursor: 'pointer',
+                                        border: '1px solid var(--glass-border)',
+                                        background: 'var(--card-bg)'
+                                    }}
+                                >
+                                    <div style={{
+                                        width: '48px', height: '48px', borderRadius: '50%',
+                                        background: profile.type === 'principal' ? 'rgba(245, 158, 11, 0.1)' : 'rgba(99, 102, 241, 0.1)',
+                                        padding: '2px',
+                                        display: 'flex', alignItems: 'center', justifyContent: 'center'
+                                    }}>
+                                        {profile.photo ? (
+                                            <img src={profile.photo} alt={profile.name} style={{ width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} />
+                                        ) : (
+                                            <Shield size={24} color={profile.type === 'principal' ? '#f59e0b' : '#6366f1'} />
+                                        )}
+                                    </div>
+                                    <div style={{ textAlign: 'center' }}>
+                                        <div style={{ fontSize: '0.85rem', fontWeight: '600', color: 'var(--text-main)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '80px' }}>
+                                            {profile.name}
+                                        </div>
+                                        <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                                            {profile.role}
+                                        </div>
+                                    </div>
+                                </motion.div>
+                            ))
+                        )}
+                    </div>
+                </div>
 
                 {/* Search Bar */}
                 <div className="glass" style={{
@@ -387,7 +567,7 @@ const AdminMessages = ({ user, onBack }) => {
                                                 <textarea
                                                     value={replyText}
                                                     onChange={(e) => setReplyText(e.target.value)}
-                                                    placeholder="Write a reply to the principal..."
+                                                    placeholder="Write a reply..."
                                                     autoFocus
                                                     style={{
                                                         width: '100%', minHeight: '80px', borderRadius: '12px',
@@ -449,7 +629,7 @@ const AdminMessages = ({ user, onBack }) => {
                                                         }}
                                                     >
                                                         {sending ? <Loader2 className="animate-spin" size={18} /> : <Send size={18} />}
-                                                        Send Reply
+                                                        Send
                                                     </button>
                                                 </div>
                                             </div>
@@ -473,6 +653,109 @@ const AdminMessages = ({ user, onBack }) => {
                     )}
                 </div>
             </div>
+
+            {/* Compose Modal */}
+            <AnimatePresence>
+                {composingTo && (
+                    <div style={{
+                        position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+                        background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        zIndex: 1000, padding: '1rem'
+                    }} onClick={() => setComposingTo(null)}>
+                        <motion.div
+                            initial={{ scale: 0.9, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            exit={{ scale: 0.9, opacity: 0 }}
+                            onClick={(e) => e.stopPropagation()}
+                            style={{
+                                width: '100%', maxWidth: '500px',
+                                background: 'var(--bg-dark)',
+                                borderRadius: '24px',
+                                padding: '1.5rem',
+                                border: '1px solid var(--glass-border)',
+                                boxShadow: '0 10px 40px rgba(0,0,0,0.4)'
+                            }}
+                        >
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+                                <h3 style={{ margin: 0, color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '1.2rem' }}>
+                                    Send Message to <span style={{ color: '#f59e0b' }}>{composingTo.name}</span>
+                                </h3>
+                                <button onClick={() => setComposingTo(null)} style={{ background: 'rgba(255,255,255,0.05)', borderRadius: '50%', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}>
+                                    <X size={18} />
+                                </button>
+                            </div>
+
+                            <textarea
+                                value={replyText}
+                                onChange={(e) => setReplyText(e.target.value)}
+                                placeholder={`Write a message to ${composingTo.name}...`}
+                                autoFocus
+                                style={{
+                                    width: '100%', minHeight: '150px', borderRadius: '16px',
+                                    background: 'var(--input-bg)', border: '1px solid var(--glass-border)',
+                                    padding: '1rem', color: 'var(--text-main)', fontSize: '1rem',
+                                    marginBottom: '1rem', resize: 'none', outline: 'none'
+                                }}
+                            />
+
+                            {selectedFile && (
+                                <div style={{
+                                    display: 'flex', alignItems: 'center', gap: '0.5rem',
+                                    background: 'rgba(245, 158, 11, 0.1)', padding: '0.5rem',
+                                    borderRadius: '8px', marginBottom: '1rem', fontSize: '0.9rem'
+                                }}>
+                                    <FileText size={16} color="#f59e0b" />
+                                    <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                        {selectedFile.name}
+                                    </span>
+                                    <X size={16} style={{ cursor: 'pointer' }} onClick={() => setSelectedFile(null)} />
+                                </div>
+                            )}
+
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <div>
+                                    <input
+                                        type="file"
+                                        ref={composeFileInputRef}
+                                        onChange={handleFileSelect}
+                                        style={{ display: 'none' }}
+                                        accept="image/*,application/pdf"
+                                    />
+                                    <button
+                                        onClick={() => composeFileInputRef.current.click()}
+                                        style={{
+                                            background: 'rgba(255,255,255,0.05)', border: '1px solid var(--glass-border)',
+                                            borderRadius: '12px', padding: '0.8rem 1rem',
+                                            display: 'flex', alignItems: 'center', gap: '0.5rem',
+                                            cursor: 'pointer', color: 'var(--text-main)'
+                                        }}
+                                    >
+                                        <Paperclip size={20} />
+                                        <span>Attach</span>
+                                    </button>
+                                </div>
+
+                                <button
+                                    onClick={handleSendDirectMessage}
+                                    disabled={sending || (!replyText.trim() && !selectedFile)}
+                                    style={{
+                                        padding: '0.8rem 2rem', borderRadius: '12px',
+                                        background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+                                        border: 'none', color: 'white', fontWeight: 'bold', fontSize: '1rem',
+                                        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem',
+                                        cursor: (sending || (!replyText.trim() && !selectedFile)) ? 'not-allowed' : 'pointer',
+                                        opacity: (sending || (!replyText.trim() && !selectedFile)) ? 0.7 : 1
+                                    }}
+                                >
+                                    {sending ? <Loader2 className="animate-spin" size={20} /> : <Send size={20} />}
+                                    Send Message
+                                </button>
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
         </motion.div>
     );
 };

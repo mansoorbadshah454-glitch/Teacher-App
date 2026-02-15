@@ -106,20 +106,30 @@ const Notebook = ({ user, onBack }) => {
     return (
         <div style={{ paddingBottom: '100px', minHeight: '100vh' }}>
             {/* Header */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+            <div style={{
+                background: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)', // Violet
+                padding: '1.5rem',
+                borderRadius: '0 0 24px 24px',
+                marginBottom: '1.5rem',
+                boxShadow: '0 10px 20px rgba(139, 92, 246, 0.2)',
+                color: 'white',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center'
+            }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
                     <button
                         onClick={onBack}
                         style={{
-                            background: 'var(--card-bg)',
-                            border: '1px solid var(--glass-border)',
+                            background: 'rgba(255,255,255,0.2)',
+                            border: 'none',
                             width: '40px',
                             height: '40px',
                             borderRadius: '12px',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
-                            color: 'var(--text-main)',
+                            color: 'white',
                             cursor: 'pointer'
                         }}
                     >
@@ -132,8 +142,8 @@ const Notebook = ({ user, onBack }) => {
                     onClick={() => setIsCreating(true)}
                     className="btn-press"
                     style={{
-                        background: 'var(--primary)',
-                        color: 'white',
+                        background: 'white',
+                        color: '#7c3aed',
                         border: 'none',
                         width: '45px',
                         height: '45px',
@@ -141,7 +151,7 @@ const Notebook = ({ user, onBack }) => {
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        boxShadow: '0 4px 12px rgba(99, 102, 241, 0.4)',
+                        boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
                         cursor: 'pointer'
                     }}
                 >

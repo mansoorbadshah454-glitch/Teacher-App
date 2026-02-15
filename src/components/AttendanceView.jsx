@@ -155,10 +155,17 @@ const AttendanceView = ({ user, onBack, onReport }) => {
                 console.log(`Found ${list.length} students in ${foundClass.name}`);
 
                 // Initialize attendance from current student status
+                // Initialize attendance based on LAST SAVED DATE
+                const today = new Date().toISOString().split('T')[0];
                 const initialAttendance = {};
+
                 list.forEach(s => {
-                    if (s.status === 'present') initialAttendance[s.id] = 'present';
-                    else if (s.status === 'absent') initialAttendance[s.id] = 'absent';
+                    // Check if the student's status was updated TODAY
+                    if (s.lastAttendanceDate === today) {
+                        if (s.status === 'present') initialAttendance[s.id] = 'present';
+                        else if (s.status === 'absent') initialAttendance[s.id] = 'absent';
+                    }
+                    // If date doesn't match (or doesn't exist), we start Fresh (all unmarked/absent)
                 });
 
                 setStudents(list);
@@ -210,6 +217,7 @@ const AttendanceView = ({ user, onBack, onReport }) => {
                 const sRef = doc(db, `schools/${user.schoolId}/classes/${assignedClass.id}/students`, student.id);
                 batch.update(sRef, {
                     status: attendance[student.id] || 'absent',
+                    lastAttendanceDate: today, // Track the date of the last update
                     updatedAt: serverTimestamp()
                 });
             });
@@ -229,7 +237,7 @@ const AttendanceView = ({ user, onBack, onReport }) => {
 
                     if (!parentsSnap.empty) {
                         const parentDoc = parentsSnap.docs[0];
-                        const parentData = parentDoc.data();
+                        // const parentData = parentDoc.data();
                         const status = attendance[student.id] || 'absent';
 
                         // Create notification for parent
@@ -256,6 +264,10 @@ const AttendanceView = ({ user, onBack, onReport }) => {
 
             await Promise.all(notificationPromises);
             console.log("All notifications created successfully!");
+
+            // Update local state to reflect the "saved today" status immediately
+            // This prevents the UI from resetting if they reload page immediately
+            setStudents(prev => prev.map(s => ({ ...s, lastAttendanceDate: today })));
 
             alert("Attendance marked and parents notified successfully!");
             onBack();

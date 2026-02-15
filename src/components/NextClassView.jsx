@@ -2,12 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { db } from '../firebase';
 import { collection, query, onSnapshot, doc, updateDoc, writeBatch, orderBy, getDocs, where, limit } from 'firebase/firestore';
-import { ChevronLeft, Users, BookOpen, Save, Loader2, Search, Sliders, ChevronRight, ClipboardList } from 'lucide-react';
+import { ChevronLeft, Users, BookOpen, Save, Loader2, Search, Sliders, ChevronRight, ClipboardList, FileText, RotateCcw, Download } from 'lucide-react';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
-const NextClassView = ({ user, onBack }) => {
-    console.log("NextClassView Render: user =", user?.uid);
+const NextClassView = ({ user, schoolInfo, onBack }) => {
     // Navigation State
-    const [viewState, setViewState] = useState('classes'); // 'classes', 'subjects', 'students'
+    const [viewState, setViewState] = useState('classes'); // 'classes', 'subjects', 'students', 'test'
 
     // Data State
     const [classes, setClasses] = useState([]);
@@ -22,6 +23,9 @@ const NextClassView = ({ user, onBack }) => {
     // Score State: Map of studentId -> { academicScore, homeworkScore }
     // We only track CHANGED scores to save bandwidth/reads
     const [scoreUpdates, setScoreUpdates] = useState({});
+
+    // Test Score State (Local Only)
+    const [testScores, setTestScores] = useState({}); // studentId -> score
 
     // 1. Fetch All Classes
     useEffect(() => {
@@ -108,7 +112,9 @@ const NextClassView = ({ user, onBack }) => {
     };
 
     const handleBack = () => {
-        if (viewState === 'students') {
+        if (viewState === 'test') {
+            setViewState('students');
+        } else if (viewState === 'students') {
             setViewState('subjects');
             setSelectedSubject(null);
             setScoreUpdates({});
@@ -201,6 +207,120 @@ const NextClassView = ({ user, onBack }) => {
         }
     };
 
+    // --- TEST FEATURE LOGIC ---
+
+    const handleTestScoreChange = (studentId, val) => {
+        const value = parseInt(val) || 0;
+        setTestScores(prev => ({
+            ...prev,
+            [studentId]: value
+        }));
+    };
+
+    const handleResetTestScores = () => {
+        if (window.confirm("Are you sure you want to reset all test scores to 0?")) {
+            setTestScores({});
+        }
+    };
+
+    const getDataUrl = (url) => {
+        return new Promise((resolve) => {
+            const img = new Image();
+            img.crossOrigin = 'Anonymous';
+            img.src = url;
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                canvas.width = img.width;
+                canvas.height = img.height;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0);
+                resolve(canvas.toDataURL('image/png'));
+            };
+            img.onerror = () => resolve(null);
+        });
+    };
+
+    const generatePDF = async () => {
+        const doc = new jsPDF();
+
+        // 1. Header Section - Colored Background
+        const pageWidth = doc.internal.pageSize.getWidth();
+        const schoolName = schoolInfo?.name || "School Name";
+        const logoUrl = schoolInfo?.logo;
+
+        // Draw Header Background
+        doc.setFillColor(79, 70, 229); // Indigo-600
+        doc.rect(0, 0, pageWidth, 40, 'F');
+
+        // Add Logo (if available)
+        if (logoUrl) {
+            try {
+                const imgData = await getDataUrl(logoUrl);
+                if (imgData) {
+                    doc.addImage(imgData, 'PNG', 15, 10, 20, 20); // x, y, w, h
+                }
+            } catch (e) {
+                console.warn("Could not add logo to PDF", e);
+            }
+        }
+
+        doc.setFontSize(22);
+        doc.setFont("helvetica", "bold");
+        doc.setTextColor(255, 255, 255); // White Text
+        doc.text(schoolName, logoUrl ? 40 : 15, 23); // Centered vertically in 40px height header
+
+        doc.setFontSize(10);
+        doc.setFont("helvetica", "normal");
+        doc.setTextColor(255, 255, 255); // White Text
+        const dateStr = new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+        doc.text(dateStr, pageWidth - 15, 23, { align: 'right' }); // Align with School Name
+
+        // 2. Test Details (Adjust Y position since header is 40px)
+        doc.setFontSize(16);
+        doc.setFont("helvetica", "bold");
+        doc.setTextColor(0, 0, 0); // Reset to Black
+        doc.text(`Test Result: ${selectedSubject}`, 15, 55);
+
+        doc.setFontSize(11);
+        doc.setFont("helvetica", "normal");
+        doc.setTextColor(60, 60, 60);
+        doc.text(`Class: ${selectedClass?.name}`, 15, 65);
+        doc.text(`Teacher: ${user.name || 'Teacher'}`, 15, 71);
+        doc.text(`Total Students: ${students.length}`, pageWidth - 15, 65, { align: 'right' });
+
+        // 3. Table
+        const tableColumn = ["Roll No", "Student Name", "Test Score"];
+        const tableRows = [];
+
+        students.forEach(student => {
+            const score = testScores[student.id] || 0;
+            const scoreData = [
+                student.rollNo || "N/A",
+                student.name,
+                `${score}%`
+            ];
+            tableRows.push(scoreData);
+        });
+
+        autoTable(doc, {
+            head: [tableColumn],
+            body: tableRows,
+            startY: 75,
+            theme: 'grid',
+            headStyles: { fillColor: [79, 70, 229], textColor: 255, fontStyle: 'bold' }, // Indigo-600
+            alternateRowStyles: { fillColor: [245, 247, 255] },
+            styles: { fontSize: 10, cellPadding: 6 },
+        });
+
+        // 4. Footer
+        const finalY = doc.lastAutoTable.finalY + 20;
+        doc.setFontSize(10);
+        doc.setTextColor(150);
+        doc.text("Generated via Teacher App", pageWidth / 2, finalY, { align: "center" });
+
+        doc.save(`${selectedClass?.name}_${selectedSubject}_Test_Report.pdf`);
+    };
+
     // Helper for gradient color based on score
     const getScoreColor = (score) => {
         if (score >= 80) return '#10b981'; // Green
@@ -222,30 +342,51 @@ const NextClassView = ({ user, onBack }) => {
             style={{ display: 'flex', flexDirection: 'column', minHeight: '100%', paddingBottom: '160px' }}
         >
             {/* Header */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1.5rem', paddingTop: '1rem' }}>
-                <button
-                    onClick={handleBack}
-                    className="btn-press"
-                    style={{
-                        background: 'var(--back-btn-bg)', border: 'none', color: 'var(--back-btn-text)',
-                        width: '44px', height: '44px', borderRadius: '14px',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center'
-                    }}
-                >
-                    <ChevronLeft size={24} />
-                </button>
-                <div>
-                    <h2 style={{ fontSize: '1.5rem', fontWeight: '800' }}>
-                        {viewState === 'classes' ? 'All Classes' :
-                            viewState === 'subjects' ? selectedClass?.name :
-                                selectedSubject}
-                    </h2>
-                    <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', fontWeight: '500' }}>
-                        {viewState === 'classes' ? 'Select a class to manage' :
-                            viewState === 'subjects' ? 'Select a subject' :
-                                `${selectedClass?.name} • ${students.length} Students • ${absentCount} Absent Today`}
-                    </p>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem', paddingTop: '1rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                    <button
+                        onClick={handleBack}
+                        className="btn-press"
+                        style={{
+                            background: 'var(--back-btn-bg)', border: 'none', color: 'var(--back-btn-text)',
+                            width: '44px', height: '44px', borderRadius: '14px',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center'
+                        }}
+                    >
+                        <ChevronLeft size={24} />
+                    </button>
+                    <div>
+                        <h2 style={{ fontSize: '1.5rem', fontWeight: '800' }}>
+                            {viewState === 'classes' ? 'All Classes' :
+                                viewState === 'subjects' ? selectedClass?.name :
+                                    viewState === 'students' ? selectedSubject :
+                                        `Test: ${selectedSubject}`}
+                        </h2>
+                        <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', fontWeight: '500' }}>
+                            {viewState === 'classes' ? 'Select a class to manage' :
+                                viewState === 'subjects' ? 'Select a subject' :
+                                    viewState === 'students' ? `${selectedClass?.name} • ${students.length} Students` :
+                                        'Enter scores & generate report'}
+                        </p>
+                    </div>
                 </div>
+
+                {/* Next Button for Test View */}
+                {viewState === 'students' && (
+                    <button
+                        onClick={() => setViewState('test')}
+                        className="btn-press"
+                        style={{
+                            background: 'var(--primary)', color: 'white',
+                            border: 'none', padding: '0.6rem 1.2rem', borderRadius: '12px',
+                            fontWeight: 'bold', fontSize: '0.9rem',
+                            display: 'flex', alignItems: 'center', gap: '0.5rem',
+                            boxShadow: '0 4px 12px rgba(99, 102, 241, 0.3)'
+                        }}
+                    >
+                        Next <ChevronRight size={18} />
+                    </button>
+                )}
             </div>
 
             <AnimatePresence mode="wait">
@@ -463,13 +604,117 @@ const NextClassView = ({ user, onBack }) => {
                         </div>
                     </motion.div>
                 )}
+
+                {/* VIEW 4: TEST MODE (NEW) */}
+                {viewState === 'test' && (
+                    <motion.div
+                        key="test"
+                        initial={{ opacity: 0, x: 50 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        exit={{ opacity: 0, x: -50 }}
+                        style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}
+                    >
+                        {/* Controls: Reset & Download */}
+                        <div style={{ display: 'flex', gap: '1rem', marginBottom: '0.5rem' }}>
+                            <button
+                                onClick={handleResetTestScores}
+                                className="glass btn-press"
+                                style={{
+                                    flex: 1,
+                                    padding: '1rem',
+                                    borderRadius: '16px',
+                                    border: 'none',
+                                    color: '#ef4444',
+                                    fontWeight: 'bold',
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem',
+                                    fontSize: '0.9rem'
+                                }}
+                            >
+                                <RotateCcw size={18} /> Reset Scores
+                            </button>
+                            <button
+                                onClick={generatePDF}
+                                className="glass btn-press"
+                                style={{
+                                    flex: 1,
+                                    padding: '1rem',
+                                    borderRadius: '16px',
+                                    border: 'none',
+                                    color: '#3b82f6',
+                                    fontWeight: 'bold',
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem',
+                                    fontSize: '0.9rem'
+                                }}
+                            >
+                                <FileText size={18} /> Create PDF
+                            </button>
+                        </div>
+
+                        {/* Search (Scoped to Test View as well) */}
+                        <div className="glass" style={{ borderRadius: '12px', padding: '0.5rem 1rem', display: 'flex', alignItems: 'center' }}>
+                            <Search size={16} color="var(--text-muted)" />
+                            <input
+                                type="text"
+                                placeholder="Search student..."
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                                style={{
+                                    background: 'transparent', border: 'none', outline: 'none',
+                                    color: 'var(--text-main)', marginLeft: '0.5rem', width: '100%'
+                                }}
+                            />
+                        </div>
+
+                        {/* Student List for Test */}
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                            {filteredStudents.map(student => {
+                                const testScore = testScores[student.id] || 0;
+                                return (
+                                    <div key={student.id} className="glass" style={{ padding: '1rem', borderRadius: '16px' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1rem' }}>
+                                            <div style={{ width: '40px', height: '40px', borderRadius: '50%', overflow: 'hidden', background: '#334155' }}>
+                                                <img
+                                                    src={student.profilePic || `https://api.dicebear.com/7.x/avataaars/svg?seed=${student.id}`}
+                                                    alt={student.name}
+                                                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                                />
+                                            </div>
+                                            <div>
+                                                <h4 style={{ fontWeight: '700', fontSize: '1rem' }}>{student.name}</h4>
+                                                <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Roll No: {student.rollNo || 'N/A'}</p>
+                                            </div>
+                                        </div>
+
+                                        {/* Test Score Slider */}
+                                        <div>
+                                            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.25rem', fontSize: '0.8rem', fontWeight: '600' }}>
+                                                <span style={{ color: 'var(--text-muted)' }}>Test Score</span>
+                                                <span style={{ color: getScoreColor(testScore) }}>{testScore}%</span>
+                                            </div>
+                                            <input
+                                                type="range" min="0" max="100"
+                                                value={testScore}
+                                                onChange={(e) => handleTestScoreChange(student.id, e.target.value)}
+                                                className="custom-slider"
+                                                style={{
+                                                    '--slider-color': getScoreColor(testScore),
+                                                    '--slider-value': testScore + '%'
+                                                }}
+                                            />
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </motion.div>
+                )}
             </AnimatePresence>
 
             <div style={{ height: '120px', flexShrink: 0 }}></div>
 
-            {/* Floating Save Button */}
+            {/* Floating Save Button - Only for 'students' view, NOT 'test' */}
             <AnimatePresence>
-                {Object.keys(scoreUpdates).length > 0 && (
+                {viewState === 'students' && Object.keys(scoreUpdates).length > 0 && (
                     <motion.div
                         initial={{ y: 100 }}
                         animate={{ y: 0 }}

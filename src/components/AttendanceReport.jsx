@@ -8,7 +8,9 @@ import autoTable from 'jspdf-autotable';
 
 const AttendanceReport = ({ user, onBack }) => {
     const [loading, setLoading] = useState(false);
+    const [reportType, setReportType] = useState('monthly'); // 'monthly' | 'yearly'
     const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7)); // YYYY-MM
+    const [selectedYear, setSelectedYear] = useState(new Date().getFullYear().toString());
     const [assignedClass, setAssignedClass] = useState(null);
     const [teacherName, setTeacherName] = useState('');
 
@@ -67,9 +69,8 @@ const AttendanceReport = ({ user, onBack }) => {
                 absentCount: 0
             }));
 
-            // 2. Fetch Attendance for Selected Month
-            // OPTIMIZATION: Fetch all class attendance and filter in memory to avoid "Composite Index" requirement
-            // valid for typical class sizes (30-50 students * 200 days = ~10k docs max, typically much less per session)
+            // 2. Fetch Attendance
+            // OPTIMIZATION: Fetch all class attendance and filter in memory
             const attendanceRef = collection(db, `schools/${user.schoolId}/attendance`);
             const qAttendance = query(
                 attendanceRef,
@@ -77,14 +78,19 @@ const AttendanceReport = ({ user, onBack }) => {
             );
 
             const attendanceSnap = await getDocs(qAttendance);
-            const [year, month] = selectedMonth.split('-');
 
-            // 3. Calculate Absent Counts
+            // 3. Process Attendance based on Report Type
             attendanceSnap.forEach(doc => {
                 const data = doc.data();
 
-                // Client-side Date Filter
-                if (!data.date.startsWith(selectedMonth)) return;
+                let isMatch = false;
+                if (reportType === 'monthly') {
+                    if (data.date.startsWith(selectedMonth)) isMatch = true;
+                } else {
+                    if (data.date.startsWith(selectedYear)) isMatch = true;
+                }
+
+                if (!isMatch) return;
 
                 if (data.records && Array.isArray(data.records)) {
                     data.records.forEach(record => {
@@ -104,6 +110,17 @@ const AttendanceReport = ({ user, onBack }) => {
             // 5. Generate PDF
             const doc = new jsPDF();
 
+            // -- Title Logic --
+            const reportTitle = reportType === 'monthly' ? "Attendance Report" : "Annual Attendance Report";
+
+            let dateSubtitle = "";
+            if (reportType === 'monthly') {
+                const dateObj = new Date(selectedMonth + '-01');
+                dateSubtitle = dateObj.toLocaleString('default', { month: 'long', year: 'numeric' });
+            } else {
+                dateSubtitle = `Year: ${selectedYear}`;
+            }
+
             // -- Header Visualization --
             // Clean "Prime" Header Background
             doc.setFillColor(67, 56, 202); // Deep Indigo (Professional)
@@ -113,13 +130,11 @@ const AttendanceReport = ({ user, onBack }) => {
             doc.setTextColor(255, 255, 255);
             doc.setFontSize(20);
             doc.setFont('helvetica', 'bold');
-            doc.text("Attendance Report", 105, 18, { align: 'center' });
+            doc.text(reportTitle, 105, 18, { align: 'center' });
 
             doc.setFontSize(11);
             doc.setFont('helvetica', 'normal');
-            const dateObj = new Date(selectedMonth + '-01');
-            const monthName = dateObj.toLocaleString('default', { month: 'long', year: 'numeric' });
-            doc.text(`${monthName}`, 105, 26, { align: 'center' });
+            doc.text(dateSubtitle, 105, 26, { align: 'center' });
 
             // -- Meta Info Box --
             doc.setTextColor(50, 50, 50);
@@ -176,7 +191,11 @@ const AttendanceReport = ({ user, onBack }) => {
                 doc.text(`Page ${i} of ${pageCount}`, 180, 285);
             }
 
-            doc.save(`Attendance_Report_${assignedClass.name}_${monthName}.pdf`);
+            const fileName = reportType === 'monthly'
+                ? `Attendance_Report_${assignedClass.name}_${dateSubtitle.replace(' ', '_')}.pdf`
+                : `Annual_Attendance_Report_${assignedClass.name}_${selectedYear}.pdf`;
+
+            doc.save(fileName);
 
             alert("PDF Downloaded Successfully!");
 
@@ -217,7 +236,7 @@ const AttendanceReport = ({ user, onBack }) => {
                 </button>
                 <div>
                     <h2 style={{ fontSize: '1.5rem', fontWeight: '800' }}>Attendance Report</h2>
-                    <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Download monthly summary</p>
+                    <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Download detailed reports</p>
                 </div>
             </div>
 
@@ -247,31 +266,90 @@ const AttendanceReport = ({ user, onBack }) => {
                     <FileText size={48} color="var(--primary)" />
                 </div>
 
+                <div style={{ width: '100%', display: 'flex', background: 'rgba(255,255,255,0.05)', borderRadius: '16px', padding: '4px', marginBottom: '1rem' }}>
+                    <button
+                        onClick={() => setReportType('monthly')}
+                        style={{
+                            flex: 1,
+                            padding: '0.75rem',
+                            borderRadius: '12px',
+                            border: 'none',
+                            background: reportType === 'monthly' ? 'var(--primary)' : 'transparent',
+                            color: reportType === 'monthly' ? 'white' : 'var(--text-muted)',
+                            fontWeight: '600',
+                            cursor: 'pointer',
+                            transition: 'all 0.2s ease'
+                        }}
+                    >
+                        Monthly
+                    </button>
+                    <button
+                        onClick={() => setReportType('yearly')}
+                        style={{
+                            flex: 1,
+                            padding: '0.75rem',
+                            borderRadius: '12px',
+                            border: 'none',
+                            background: reportType === 'yearly' ? 'var(--primary)' : 'transparent',
+                            color: reportType === 'yearly' ? 'white' : 'var(--text-muted)',
+                            fontWeight: '600',
+                            cursor: 'pointer',
+                            transition: 'all 0.2s ease'
+                        }}
+                    >
+                        Yearly
+                    </button>
+                </div>
+
                 <div style={{ width: '100%' }}>
                     <label style={{ display: 'block', textAlign: 'left', marginBottom: '0.5rem', fontSize: '0.9rem', color: 'var(--text-muted)', fontWeight: '600' }}>
-                        Select Month
+                        {reportType === 'monthly' ? 'Select Month' : 'Select Year'}
                     </label>
                     <div style={{ position: 'relative' }}>
-                        <input
-                            type="month"
-                            value={selectedMonth}
-                            onChange={(e) => setSelectedMonth(e.target.value)}
-                            style={{
-                                width: '100%',
-                                padding: '1rem',
-                                borderRadius: '16px',
-                                border: '2px solid rgba(99, 102, 241, 0.2)', // Light Indigo Border
-                                background: '#ffffff', // White Background
-                                color: '#4f46e5', // Indigo Text
-                                fontSize: '1.1rem',
-                                fontWeight: '600',
-                                outline: 'none',
-                                cursor: 'pointer',
-                                colorScheme: 'light', // Force Light Theme for Picker
-                                transition: 'all 0.2s ease',
-                                boxShadow: '0 4px 12px rgba(0,0,0,0.05)'
-                            }}
-                        />
+                        {reportType === 'monthly' ? (
+                            <input
+                                type="month"
+                                value={selectedMonth}
+                                onChange={(e) => setSelectedMonth(e.target.value)}
+                                style={{
+                                    width: '100%',
+                                    padding: '1rem',
+                                    borderRadius: '16px',
+                                    border: '2px solid rgba(99, 102, 241, 0.2)', // Light Indigo Border
+                                    background: '#ffffff', // White Background
+                                    color: '#4f46e5', // Indigo Text
+                                    fontSize: '1.1rem',
+                                    fontWeight: '600',
+                                    outline: 'none',
+                                    cursor: 'pointer',
+                                    colorScheme: 'light', // Force Light Theme for Picker
+                                    transition: 'all 0.2s ease',
+                                    boxShadow: '0 4px 12px rgba(0,0,0,0.05)'
+                                }}
+                            />
+                        ) : (
+                            <select
+                                value={selectedYear}
+                                onChange={(e) => setSelectedYear(e.target.value)}
+                                style={{
+                                    width: '100%',
+                                    padding: '1rem',
+                                    borderRadius: '16px',
+                                    border: '2px solid rgba(99, 102, 241, 0.2)',
+                                    background: '#ffffff',
+                                    color: '#4f46e5',
+                                    fontSize: '1.1rem',
+                                    fontWeight: '600',
+                                    outline: 'none',
+                                    cursor: 'pointer',
+                                    appearance: 'none'
+                                }}
+                            >
+                                {Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i).map(year => (
+                                    <option key={year} value={year}>{year}</option>
+                                ))}
+                            </select>
+                        )}
                         <Calendar size={20} style={{ position: 'absolute', right: '1rem', top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', color: '#6366f1' }} />
                     </div>
                 </div>

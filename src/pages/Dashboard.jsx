@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { auth, db, storage } from '../firebase';
-import { addDoc, collection, serverTimestamp, doc, onSnapshot, query, orderBy, updateDoc, setDoc, arrayUnion, arrayRemove, increment, getDocs, getDoc, deleteDoc } from 'firebase/firestore';
+import { addDoc, collection, serverTimestamp, doc, onSnapshot, query, orderBy, updateDoc, setDoc, arrayUnion, arrayRemove, increment, getDocs, getDoc, deleteDoc, where } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import {
     UserCheck,
@@ -519,8 +519,111 @@ const Dashboard = ({ user }) => {
         setMenuOpenId(null);
     };
 
+    // Notification State
+    const [lastViewedFeed, setLastViewedFeed] = useState(() => {
+        return localStorage.getItem('lastViewedFeed') || new Date().toISOString();
+    });
+    const [unreadCount, setUnreadCount] = useState(0);
+    const [adminUnreadCount, setAdminUnreadCount] = useState(0);
+
+    // Calculate unread posts
+    useEffect(() => {
+        if (!posts || posts.length === 0) {
+            setUnreadCount(0);
+            return;
+        }
+
+        const lastViewed = new Date(lastViewedFeed);
+        const count = posts.filter(post => {
+            if (!post.timestamp) return false;
+            const postDate = post.timestamp.toDate ? post.timestamp.toDate() : new Date(post.timestamp);
+            return postDate > lastViewed;
+        }).length;
+
+        setUnreadCount(count);
+    }, [posts, lastViewedFeed]);
+
+    // Admin Messages Listener
+    useEffect(() => {
+        if (!user?.schoolId) return;
+
+        const messagesMap = new Map();
+
+        const updateUnreadCount = () => {
+            const list = Array.from(messagesMap.values());
+            // Filter where read is false
+            const unread = list.filter(m => m.read === false).length;
+            setAdminUnreadCount(unread);
+        };
+
+        const unsubscribers = [];
+
+        // Query 1: By ID (Preferred)
+        if (user.uid) {
+            const q1 = query(
+                collection(db, `schools/${user.schoolId}/messages`),
+                where("toId", "==", user.uid),
+                where("read", "==", false)
+            );
+            const unsub1 = onSnapshot(q1, (snapshot) => {
+                snapshot.docs.forEach(doc => {
+                    messagesMap.set(doc.id, { id: doc.id, ...doc.data() });
+                });
+                // Note: snapshot.docChanges() would be more efficient to handle removals (e.g. read status change)
+                // But simplified: Re-scanning list from map? 
+                // Wait, if a doc is removed from query (becomes read), we need to remove it from map.
+                snapshot.docChanges().forEach(change => {
+                    if (change.type === "removed") {
+                        messagesMap.delete(change.doc.id);
+                    } else {
+                        messagesMap.set(change.doc.id, { id: change.doc.id, ...change.doc.data() });
+                    }
+                });
+                updateUnreadCount();
+            });
+            unsubscribers.push(unsub1);
+        }
+
+        // Query 2: By Name (Fallback)
+        if (user.name) {
+            const q2 = query(
+                collection(db, `schools/${user.schoolId}/messages`),
+                where("to", "==", user.name),
+                where("read", "==", false)
+            );
+            const unsub2 = onSnapshot(q2, (snapshot) => {
+                snapshot.docChanges().forEach(change => {
+                    if (change.type === "removed") {
+                        messagesMap.delete(change.doc.id);
+                    } else {
+                        messagesMap.set(change.doc.id, { id: change.doc.id, ...change.doc.data() });
+                    }
+                });
+                updateUnreadCount();
+            });
+            unsubscribers.push(unsub2);
+        }
+
+        return () => unsubscribers.forEach(unsub => unsub());
+    }, [user]);
+
+    const markFeedAsRead = () => {
+        const now = new Date().toISOString();
+        setLastViewedFeed(now);
+        localStorage.setItem('lastViewedFeed', now);
+        setUnreadCount(0);
+    };
+
     const stats = [
-        { id: 'news-feed', title: 'News Feed', icon: FileText, color: '#10b981', description: 'School announcements', action: () => setCurrentView('feed') },
+        {
+            id: 'news-feed',
+            title: 'News Feed',
+            icon: FileText,
+            color: '#10b981',
+            description: 'School announcements',
+            action: () => { setCurrentView('feed'); markFeedAsRead(); },
+            badge: unreadCount > 0 ? unreadCount : null
+        },
         { id: 'attendance', title: 'Attendance', icon: UserCheck, color: '#6366f1', description: 'Mark today\'s presence', action: () => setCurrentView('attendance') },
         { id: 'performance', title: 'Performance', icon: BarChart3, color: '#8b5cf6', description: 'Update student scores', action: () => setCurrentView('performance') },
         { id: 'next-class', title: 'Next Class', icon: Clock, color: '#f59e0b', description: 'Update class scores', action: () => setCurrentView('next-class') },
@@ -577,6 +680,7 @@ const Dashboard = ({ user }) => {
             setCurrentView('notebook');
         } else if (tab === 'new-task') {
             setCurrentView('feed');
+            markFeedAsRead();
         } else if (tab === 'contact-parents') {
             setCurrentView('contact-parents');
         } else if (tab === 'admin-messages') {
@@ -1041,6 +1145,36 @@ const Dashboard = ({ user }) => {
                                                         <span style={{ opacity: 0.5 }}>•</span>
                                                     </>
                                                 )}
+                                                {(post.role === 'Principal' || post.role === 'principal') && (
+                                                    <>
+                                                        <span style={{
+                                                            background: 'rgba(245, 158, 11, 0.15)',
+                                                            color: '#f59e0b',
+                                                            padding: '2px 8px',
+                                                            borderRadius: '6px',
+                                                            fontWeight: '700',
+                                                            fontSize: '0.7rem'
+                                                        }}>
+                                                            Principal
+                                                        </span>
+                                                        <span style={{ opacity: 0.5 }}>•</span>
+                                                    </>
+                                                )}
+                                                {(post.role === 'Admin' || post.role === 'admin') && (
+                                                    <>
+                                                        <span style={{
+                                                            background: 'rgba(239, 68, 68, 0.15)',
+                                                            color: '#ef4444',
+                                                            padding: '2px 8px',
+                                                            borderRadius: '6px',
+                                                            fontWeight: '700',
+                                                            fontSize: '0.7rem'
+                                                        }}>
+                                                            Admin
+                                                        </span>
+                                                        <span style={{ opacity: 0.5 }}>•</span>
+                                                    </>
+                                                )}
                                                 <span>{post.timestamp ? new Date(post.timestamp.toDate()).toLocaleDateString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Just now'}</span>
                                                 <span style={{ opacity: 0.5 }}>•</span>
 
@@ -1365,9 +1499,32 @@ const Dashboard = ({ user }) => {
                                             color: stat.color,
                                             display: 'flex',
                                             alignItems: 'center',
-                                            justifyContent: 'center'
+                                            justifyContent: 'center',
+                                            position: 'relative'
                                         }}>
                                             <stat.icon size={22} />
+                                            {stat.badge && (
+                                                <div style={{
+                                                    position: 'absolute',
+                                                    top: '-6px',
+                                                    right: '-6px',
+                                                    background: '#ef4444',
+                                                    color: 'white',
+                                                    borderRadius: '50%',
+                                                    minWidth: '18px',
+                                                    height: '18px',
+                                                    padding: '0 4px',
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'center',
+                                                    fontSize: '0.65rem',
+                                                    fontWeight: 'bold',
+                                                    boxShadow: '0 2px 4px rgba(239, 68, 68, 0.3)',
+                                                    border: '2px solid var(--card-bg)'
+                                                }}>
+                                                    {stat.badge > 9 ? '9+' : stat.badge}
+                                                </div>
+                                            )}
                                         </div>
                                         <div>
                                             <h3 style={{ fontSize: '0.95rem', fontWeight: '700', marginBottom: '0.25rem' }}>{stat.title}</h3>
@@ -1454,9 +1611,32 @@ const Dashboard = ({ user }) => {
                                     display: 'flex',
                                     alignItems: 'center',
                                     justifyContent: 'center',
-                                    flexShrink: 0
+                                    flexShrink: 0,
+                                    position: 'relative'
                                 }}>
                                     <Shield size={24} />
+                                    {adminUnreadCount > 0 && (
+                                        <div style={{
+                                            position: 'absolute',
+                                            top: '-6px',
+                                            right: '-6px',
+                                            background: '#ef4444',
+                                            color: 'white',
+                                            borderRadius: '50%',
+                                            minWidth: '20px',
+                                            height: '20px',
+                                            padding: '0 5px',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            fontSize: '0.75rem',
+                                            fontWeight: 'bold',
+                                            boxShadow: '0 2px 4px rgba(239, 68, 68, 0.3)',
+                                            border: '2px solid var(--card-bg)'
+                                        }}>
+                                            {adminUnreadCount > 9 ? '9+' : adminUnreadCount}
+                                        </div>
+                                    )}
                                 </div>
                                 <div style={{ flex: 1 }}>
                                     <h3 style={{ fontSize: '1.05rem', fontWeight: '700', marginBottom: '0.25rem' }}>Admin Messages</h3>

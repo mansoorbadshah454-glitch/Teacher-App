@@ -2,11 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { db } from '../firebase';
 import { collection, query, onSnapshot, doc, updateDoc, writeBatch, orderBy, getDocs, where, limit } from 'firebase/firestore';
-import { ChevronLeft, Users, BookOpen, Save, Loader2, Search, Sliders, ChevronRight, ClipboardList, FileText, RotateCcw, Download } from 'lucide-react';
+import { ChevronLeft, Users, BookOpen, Save, Loader2, Search, Sliders, ChevronRight, ClipboardList, FileText, RotateCcw, Download, ShieldAlert } from 'lucide-react';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
-const NextClassView = ({ user, schoolInfo, onBack }) => {
+const NextClassView = ({ user, schoolInfo, teacherProfile, onBack }) => {
     // Navigation State
     const [viewState, setViewState] = useState('classes'); // 'classes', 'subjects', 'students', 'test'
 
@@ -448,29 +448,53 @@ const NextClassView = ({ user, schoolInfo, onBack }) => {
                         style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}
                     >
                         {selectedClass?.subjects?.length > 0 ? (
-                            selectedClass.subjects.map(subj => (
-                                <div
-                                    key={subj}
-                                    onClick={() => handleSubjectSelect(subj)}
-                                    className="glass btn-press"
-                                    style={{
-                                        padding: '1.25rem', borderRadius: '16px', cursor: 'pointer',
-                                        display: 'flex', alignItems: 'center', justifyContent: 'space-between'
-                                    }}
-                                >
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                                        <div style={{
-                                            width: '36px', height: '36px', borderRadius: '10px',
-                                            background: 'rgba(244, 63, 94, 0.1)', color: '#f43f5e',
-                                            display: 'flex', alignItems: 'center', justifyContent: 'center'
-                                        }}>
-                                            <BookOpen size={18} />
+                            selectedClass.subjects.map(subj => {
+                                // Subject Restriction Logic
+                                const isAssigned = teacherProfile?.subjects?.includes(subj);
+
+                                return (
+                                    <div
+                                        key={subj}
+                                        onClick={() => {
+                                            if (isAssigned) {
+                                                handleSubjectSelect(subj);
+                                            } else {
+                                                alert(`You are not assigned to teach ${subj}. Please contact the principal.`);
+                                            }
+                                        }}
+                                        className={isAssigned ? "glass btn-press" : "glass"}
+                                        style={{
+                                            padding: '1.25rem', borderRadius: '16px',
+                                            cursor: isAssigned ? 'pointer' : 'not-allowed',
+                                            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                                            opacity: isAssigned ? 1 : 0.5,
+                                            background: isAssigned ? 'var(--glass-bg)' : 'rgba(0,0,0,0.05)',
+                                            filter: isAssigned ? 'none' : 'grayscale(100%)'
+                                        }}
+                                    >
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                                            <div style={{
+                                                width: '36px', height: '36px', borderRadius: '10px',
+                                                background: 'rgba(244, 63, 94, 0.1)', color: '#f43f5e',
+                                                display: 'flex', alignItems: 'center', justifyContent: 'center'
+                                            }}>
+                                                <BookOpen size={18} />
+                                            </div>
+                                            <div style={{ display: 'flex', flexDirection: 'column' }}>
+                                                <span style={{ fontSize: '1rem', fontWeight: '600' }}>{subj}</span>
+                                                {!isAssigned && <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Not Assigned</span>}
+                                            </div>
                                         </div>
-                                        <span style={{ fontSize: '1rem', fontWeight: '600' }}>{subj}</span>
+                                        {isAssigned ? (
+                                            <ChevronRight size={20} color="var(--text-muted)" />
+                                        ) : (
+                                            <div style={{ padding: '5px', borderRadius: '50%', background: 'rgba(0,0,0,0.1)' }}>
+                                                <ShieldAlert size={16} />
+                                            </div>
+                                        )}
                                     </div>
-                                    <ChevronRight size={20} color="var(--text-muted)" />
-                                </div>
-                            ))
+                                )
+                            })
                         ) : (
                             <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>
                                 No subjects assigned to this class.

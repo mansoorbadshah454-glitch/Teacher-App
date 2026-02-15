@@ -1359,7 +1359,7 @@ const Dashboard = ({ user }) => {
         console.log("Dashboard: Rendering NextClassView");
         return (
             <div className="app-container" style={{ padding: '1.5rem', paddingBottom: '120px' }}>
-                <NextClassView user={user} schoolInfo={schoolInfo} onBack={() => { setCurrentView('main'); setActiveTab('home'); }} />
+                <NextClassView user={user} schoolInfo={schoolInfo} teacherProfile={teacherProfile} onBack={() => { setCurrentView('main'); setActiveTab('home'); }} />
                 <BottomNav activeTab="next-class" setActiveTab={handleNavigation} />
             </div>
         );

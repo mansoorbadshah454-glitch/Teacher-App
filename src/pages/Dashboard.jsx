@@ -36,6 +36,7 @@ import AttendanceReport from '../components/AttendanceReport';
 import BottomNav from '../components/BottomNav';
 import Notebook from '../components/Notebook';
 import ContactParents from '../components/ContactParents';
+import AdminMessages from '../components/AdminMessages';
 
 const Dashboard = ({ user }) => {
     const [currentView, setCurrentView] = useState('main'); // 'main', 'attendance', 'feed'
@@ -47,6 +48,7 @@ const Dashboard = ({ user }) => {
     const [isSuspended, setIsSuspended] = useState(false);
     const [loading, setLoading] = useState(true);
     const [schoolInfo, setSchoolInfo] = useState({ name: '', logo: '' });
+
     const [posts, setPosts] = useState([]);
     const [teacherProfile, setTeacherProfile] = useState({ assignedClasses: [], subjects: [] });
     const [theme, setTheme] = useState('dark');
@@ -577,6 +579,8 @@ const Dashboard = ({ user }) => {
             setCurrentView('feed');
         } else if (tab === 'contact-parents') {
             setCurrentView('contact-parents');
+        } else if (tab === 'admin-messages') {
+            setCurrentView('admin-messages');
         }
     };
 
@@ -1246,6 +1250,15 @@ const Dashboard = ({ user }) => {
         );
     }
 
+    if (currentView === 'admin-messages') {
+        return (
+            <div className="app-container" style={{ padding: '0', paddingBottom: '120px' }}>
+                <AdminMessages user={user} onBack={() => { setCurrentView('main'); setActiveTab('home'); }} />
+                <BottomNav activeTab="home" setActiveTab={handleNavigation} />
+            </div>
+        );
+    }
+
     return (
         <div className="app-container" style={{ padding: '1.5rem' }}>
             {/* Header */}
@@ -1379,7 +1392,7 @@ const Dashboard = ({ user }) => {
                                     display: 'flex',
                                     alignItems: 'center',
                                     gap: '1rem',
-                                    marginBottom: '2rem',
+                                    marginBottom: '1rem',
                                     cursor: 'pointer',
                                     position: 'relative',
                                     overflow: 'hidden',
@@ -1406,6 +1419,53 @@ const Dashboard = ({ user }) => {
                                     <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', lineHeight: '1.2' }}>Message student parents directly</p>
                                 </div>
                                 <ChevronRight color="#ec4899" style={{ opacity: 0.6 }} size={20} />
+                            </motion.div>
+
+
+                            {/* Admin Messages Card - Full Width (New) */}
+                            <motion.div
+                                initial={{ opacity: 0, y: 20 }}
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ delay: 0.5 }}
+                                whileTap={{ scale: 0.98 }}
+                                onClick={() => setCurrentView('admin-messages')}
+                                className="glass"
+                                style={{
+                                    padding: '1.25rem',
+                                    borderRadius: '24px',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '1rem',
+                                    marginBottom: '2rem',
+                                    cursor: 'pointer',
+                                    position: 'relative',
+                                    overflow: 'hidden',
+                                    boxShadow: 'var(--card-shadow)',
+                                    background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.1) 0%, rgba(217, 119, 6, 0.1) 100%)',
+                                    border: '1px solid rgba(245, 158, 11, 0.2)'
+                                }}
+                            >
+                                <div style={{
+                                    width: '48px',
+                                    height: '48px',
+                                    borderRadius: '14px',
+                                    background: 'rgba(245, 158, 11, 0.2)',
+                                    color: '#f59e0b',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    flexShrink: 0
+                                }}>
+                                    <Shield size={24} />
+                                </div>
+                                <div style={{ flex: 1 }}>
+                                    <h3 style={{ fontSize: '1.05rem', fontWeight: '700', marginBottom: '0.25rem' }}>Admin Messages</h3>
+                                    <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', lineHeight: '1.2' }}>Updates from Principal & Admin</p>
+                                </div>
+
+
+
+                                <ChevronRight color="#f59e0b" style={{ opacity: 0.6 }} size={20} />
                             </motion.div>
 
 

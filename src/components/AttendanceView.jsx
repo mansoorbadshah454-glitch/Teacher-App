@@ -196,6 +196,10 @@ const AttendanceView = ({ user, onBack, onReport }) => {
             const batch = writeBatch(db);
             const today = new Date().toISOString().split('T')[0];
 
+            const presentCount = Object.values(attendance).filter(v => v === 'present').length;
+            const absentCount = students.length - presentCount;
+            const totalStudents = students.length;
+
             // 1. Create historical record
             const historyRef = doc(collection(db, `schools/${user.schoolId}/attendance`));
             batch.set(historyRef, {
@@ -204,6 +208,9 @@ const AttendanceView = ({ user, onBack, onReport }) => {
                 classId: assignedClass.id,
                 className: assignedClass.name,
                 date: today,
+                presentCount,
+                absentCount,
+                totalStudents,
                 records: Object.entries(attendance).map(([id, status]) => ({
                     id,
                     name: students.find(s => s.id === id)?.name || 'Unknown',
